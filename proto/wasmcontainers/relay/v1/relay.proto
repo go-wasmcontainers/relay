@@ -1,0 +1,354 @@
+// SPDX-License-Identifier: BSD-3-Clause
+//
+// The relay's control API (gRPC, gRPC-Web and Connect, served with
+// connect-go) and the control messages of its data-plane frames.
+//
+// Resources follow OpenStack Neutron's networking API: a class has one
+// network; each container attached to it is a port with one address; ports
+// carry security groups; a group holds rules that only allow. See
+// https://go-wasmcontainers.github.io/docs/main/design/classroom-network/
+syntax = "proto3";
+
+package wasmcontainers.relay.v1;
+
+option go_package = "github.com/go-wasmcontainers/relay/gen/relayv1;relayv1";
+
+// ---------------------------------------------------------------- resources
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_INGRESS = 1;
+  DIRECTION_EGRESS = 2;
+}
+
+enum Protocol {
+  PROTOCOL_ANY = 0;
+  PROTOCOL_TCP = 6;
+  PROTOCOL_UDP = 17;
+  PROTOCOL_ICMP = 1;
+}
+
+enum Template {
+  // No ingress; egress only to the teacher's subnet. Opening flows is the lab.
+  TEMPLATE_ISOLATED = 0;
+  // Neutron's default group: all egress, ingress from the same group.
+  TEMPLATE_NEUTRON_DEFAULT = 1;
+}
+
+message Class {
+  string id = 1;
+  string name = 2;
+  // Shown to the teacher only (admin principal); empty for students.
+  string join_code = 3;
+  Network network = 4;
+  Template template = 5;
+  int64 created_unix = 6;
+  // Who may join, when the relay verifies OpenID Connect tokens: entries
+  // "sub:<subject>", "email:<verified address>" or "group:<group>". Empty:
+  // anybody with a valid token and the join code.
+  repeated string allowed = 7;
+  // Join needs an OpenID Connect token (the relay must be configured with
+  // an issuer). Without it the join code alone admits (classroom LAN).
+  bool require_identity = 8;
+  // Which relay holds the class, and the lease epoch it holds it under. One
+  // relay holds a class at a time; a client refuses a relay that shows an
+  // older epoch than one it has seen (fencing). A single relay: epoch 1.
+  string relay_id = 9;
+  uint64 epoch = 10;
+}
+
+message Network {
+  string cidr = 1;          // the class network, e.g. 10.42.0.0/16
+  uint32 session_bits = 2;  // prefix length of each session's subnet, e.g. 24
+  string dns_domain = 3;    // e.g. "class"
+}
+
+message Session {
+  string id = 1;
+  string class_id = 2;
+  string label = 3;        // DNS label, derived by the relay
+  string display_name = 4;
+  string subnet = 5;       // e.g. 10.42.3.0/24
+  bool teacher = 6;
+  bool connected = 7;
+  int64 last_seen_unix = 8;
+}
+
+message Port {
+  string id = 1;
+  string class_id = 2;
+  string session_id = 3;
+  string container = 4;
+  string ip = 5;
+  string dns_name = 6;     // container.label.domain
+  repeated string security_groups = 7;
+  bool port_security_enabled = 8;
+}
+
+message SecurityGroup {
+  string id = 1;
+  string class_id = 2;
+  string name = 3;
+  string description = 4;
+  bool stateful = 5;
+  repeated SecurityGroupRule rules = 6;
+}
+
+message SecurityGroupRule {
+  string id = 1;
+  string security_group_id = 2;
+  Direction direction = 3;
+  // Only IPv4 for now ("IPv4"); IPv6 is planned.
+  string ethertype = 4;
+  Protocol protocol = 5;
+  // TCP/UDP: port range. ICMP: type and code. 0 with 0: any.
+  uint32 port_range_min = 6;
+  uint32 port_range_max = 7;
+  oneof remote {
+    string remote_ip_prefix = 8;
+    string remote_group_id = 9;
+  }
+  string description = 10;
+  bool log = 11;
+}
+
+enum Verdict {
+  VERDICT_UNSPECIFIED = 0;
+  VERDICT_ALLOW = 1;
+  VERDICT_DENY = 2;
+  VERDICT_REVOKED = 3;
+  VERDICT_CLOSED = 4;
+}
+
+message FlowEvent {
+  int64 time_unix_nano = 1;
+  string class_id = 2;
+  string src_session = 3;
+  string src_port_id = 4;
+  string src = 5;   // "10.42.1.2:51234"
+  string dst_session = 6;
+  string dst_port_id = 7;
+  string dst = 8;
+  Protocol protocol = 9;
+  Verdict verdict = 10;
+  // The rules that allowed the flow at each end; empty when none did.
+  string egress_rule_id = 11;
+  string ingress_rule_id = 12;
+  string reason = 13;
+  uint64 bytes_out = 14;
+  uint64 bytes_in = 15;
+}
+
+// ---------------------------------------------------------------- services
+
+message CreateClassRequest {
+  string name = 1;
+  string cidr = 2;          // default 10.42.0.0/16
+  uint32 session_bits = 3;  // default 24
+  string dns_domain = 4;    // default "class"
+  Template template = 5;
+  repeated string allowed = 6;
+  bool require_identity = 7;
+}
+message GetClassRequest { string id = 1; }
+message DeleteClassRequest { string id = 1; }
+message DeleteClassResponse {}
+message ListClassesRequest {}
+message ListClassesResponse { repeated Class classes = 1; }
+message RotateJoinCodeRequest { string class_id = 1; }
+message ListSessionsRequest { string class_id = 1; }
+message ListSessionsResponse { repeated Session sessions = 1; }
+message KickSessionRequest { string class_id = 1; string session = 2; }
+message KickSessionResponse {}
+
+service ClassService {
+  rpc CreateClass(CreateClassRequest) returns (Class);
+  rpc GetClass(GetClassRequest) returns (Class);
+  // Deletes the class, its sessions, ports, groups and their audit trail of
+  // identities (the audit log keeps only pseudonymous ids).
+  rpc DeleteClass(DeleteClassRequest) returns (DeleteClassResponse);
+  rpc ListClasses(ListClassesRequest) returns (ListClassesResponse);
+  rpc RotateJoinCode(RotateJoinCodeRequest) returns (Class);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc KickSession(KickSessionRequest) returns (KickSessionResponse);
+}
+
+message JoinRequest {
+  string join_code = 1;
+  string display_name = 2;
+}
+message JoinResponse {
+  string session_token = 1;
+  Session session = 2;
+  Class class = 3;
+}
+message TeacherSessionRequest { string class_id = 1; }
+message RefreshSessionRequest { string session_token = 1; }
+message RefreshSessionResponse { string session_token = 1; int64 expires_unix = 2; }
+
+// Join is the only call a client without a session token may make. With an
+// OpenID Connect issuer configured, Join and RefreshSession also read the
+// caller's token from "Authorization: Bearer".
+service JoinService {
+  rpc Join(JoinRequest) returns (JoinResponse);
+  // A new session token before the old one expires, re-checking the
+  // identity when there is one. The data connection takes it in a REAUTH
+  // frame: no flow is dropped.
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse);
+  // Admin only: a session token for the teacher's own containers.
+  rpc TeacherSession(TeacherSessionRequest) returns (JoinResponse);
+}
+
+message ListSecurityGroupsRequest { string class_id = 1; }
+message ListSecurityGroupsResponse { repeated SecurityGroup security_groups = 1; }
+message CreateSecurityGroupRequest {
+  string class_id = 1;
+  string name = 2;
+  string description = 3;
+  bool stateless = 4;
+}
+message DeleteSecurityGroupRequest { string class_id = 1; string group = 2; }
+message DeleteSecurityGroupResponse {}
+message CreateRuleRequest {
+  string class_id = 1;
+  string group = 2;  // id or name
+  SecurityGroupRule rule = 3;
+}
+message DeleteRuleRequest { string class_id = 1; string rule_id = 2; }
+message DeleteRuleResponse {}
+message ExplainFlowRequest {
+  string class_id = 1;
+  string src = 2;  // port id, dns name or "label/container"
+  string dst = 3;
+  Protocol protocol = 4;
+  uint32 dst_port = 5;
+}
+
+service SecurityGroupService {
+  rpc ListSecurityGroups(ListSecurityGroupsRequest) returns (ListSecurityGroupsResponse);
+  rpc CreateSecurityGroup(CreateSecurityGroupRequest) returns (SecurityGroup);
+  rpc DeleteSecurityGroup(DeleteSecurityGroupRequest) returns (DeleteSecurityGroupResponse);
+  rpc CreateRule(CreateRuleRequest) returns (SecurityGroupRule);
+  rpc DeleteRule(DeleteRuleRequest) returns (DeleteRuleResponse);
+  rpc ExplainFlow(ExplainFlowRequest) returns (FlowEvent);
+}
+
+message ListPortsRequest { string class_id = 1; string session = 2; }
+message ListPortsResponse { repeated Port ports = 1; }
+message UpdatePortRequest {
+  string class_id = 1;
+  string port = 2;  // id, dns name or "label/container"
+  repeated string security_groups = 3;  // ids or names; replaces the list
+  bool set_security_groups = 4;
+  optional bool port_security_enabled = 5;
+}
+
+service PortService {
+  rpc ListPorts(ListPortsRequest) returns (ListPortsResponse);
+  rpc UpdatePort(UpdatePortRequest) returns (Port);
+}
+
+message WatchFlowsRequest {
+  string class_id = 1;
+  bool deny_only = 2;
+  string session = 3;
+  // Replay up to this many recent events first (at most 1000).
+  uint32 backlog = 4;
+}
+
+service FlowLogService {
+  rpc WatchFlows(WatchFlowsRequest) returns (stream FlowEvent);
+}
+
+// ------------------------------------------------- data-plane control frames
+//
+// The data plane is binary frames on one WebSocket per browser (see package
+// frame). Control frames carry these messages; DATA frames carry raw bytes.
+
+message Hello {
+  uint32 version = 1;       // frame protocol version, 1
+  string session_token = 2;
+}
+
+message Welcome {
+  uint32 version = 1;
+  Session session = 2;
+  Network network = 3;
+  // Per-session limits the relay enforces.
+  Limits limits = 4;
+  // See Class.relay_id and Class.epoch.
+  string relay_id = 5;
+  uint64 epoch = 6;
+  int64 token_expires_unix = 7;
+}
+
+message Limits {
+  uint32 max_streams = 1;
+  uint32 max_listeners = 2;
+  uint32 max_ports = 3;
+  uint32 stream_window = 4;
+  uint32 max_payload = 5;
+  uint64 bytes_per_second = 6;
+  uint32 frames_per_second = 7;
+}
+
+message Attach { string container = 1; }
+message Attached { Port port = 1; }
+message Detach { string port_id = 1; }
+
+message Listen {
+  string port_id = 1;
+  Protocol protocol = 2;  // TCP or UDP
+  uint32 port = 3;        // 0: the relay picks an ephemeral one
+}
+message Listening { uint32 port = 1; }
+message Unlisten { string port_id = 1; Protocol protocol = 2; uint32 port = 3; }
+
+message Connect {
+  string port_id = 1;
+  string dst_ip = 2;
+  uint32 dst_port = 3;
+}
+// Sent by the relay to the listener's browser.
+message Incoming {
+  string port_id = 1;  // the listening port
+  uint32 listen_port = 2;
+  string src_ip = 3;
+  uint32 src_port = 4;
+}
+message Accepted {
+  string src_ip = 1;
+  uint32 src_port = 2;  // the caller's ephemeral port, chosen by the relay
+}
+
+message Datagram {
+  string port_id = 1;
+  uint32 src_port = 2;   // the sender's bound port (0: ephemeral)
+  string dst_ip = 3;
+  uint32 dst_port = 4;
+  bytes payload = 5;
+  // Filled in by the relay on delivery; ignored when a client sends it.
+  string src_ip = 6;
+}
+
+message Resolve { string name = 1; string port_id = 2; }
+message Resolved { repeated string ips = 1; }
+
+enum Code {
+  CODE_OK = 0;
+  CODE_REFUSED = 1;         // no listener, or the firewall said no (ECONNREFUSED)
+  CODE_UNREACHABLE = 2;     // no such address
+  CODE_INVALID = 3;
+  CODE_LIMIT = 4;           // a quota or a rate limit
+  CODE_NOT_FOUND = 5;
+  CODE_RESET = 6;           // the peer went away, or the rule was removed
+  CODE_IN_USE = 7;          // EADDRINUSE
+  CODE_PROTOCOL = 8;        // a protocol violation: the connection closes
+  CODE_UNAUTHENTICATED = 9;
+  CODE_VERSION = 10;
+}
+
+message Result {
+  Code code = 1;
+  string message = 2;
+}
