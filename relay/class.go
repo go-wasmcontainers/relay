@@ -33,6 +33,7 @@ type class struct {
 	log      *flowLog
 	subs     map[*subscriber]struct{}
 	denySeen map[flowKey]time.Time // last deny logged per UDP flow
+	edges    map[edgeKey]*edgeStat // the flow map's counters
 }
 
 type lkey struct {

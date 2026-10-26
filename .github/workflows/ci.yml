@@ -85,6 +85,10 @@ jobs:
           "$BIN/govulncheck" -format json ./... > /tmp/vuln.json || true
           test -s /tmp/vuln.json || { echo "::error::govulncheck wrote nothing at all"; exit 1; }
           "$BIN/vulngate" -go "$(go env GOVERSION)" /tmp/vuln.json
+          # The flow-map page's module (go-widgets and its dependencies).
+          "$BIN/govulncheck" -C web/flowmap -format json ./... > /tmp/vuln-flowmap.json || true
+          test -s /tmp/vuln-flowmap.json || { echo "::error::govulncheck wrote nothing for web/flowmap"; exit 1; }
+          "$BIN/vulngate" -go "$(go env GOVERSION)" /tmp/vuln-flowmap.json
 
   # gen/relayv1 must be exactly what the pinned generators make of the proto.
   proto:
@@ -121,6 +125,45 @@ jobs:
       - uses: actions/setup-go@v7
         with: { go-version: '1.27.3' }
       - run: GOOS=js GOARCH=wasm CGO_ENABLED=0 go build ./driver ./frame ./firewall ./auth ./gen/...
+
+  # The flow-map page: its own module (web/flowmap, on go-widgets), tested
+  # natively, built to WebAssembly, embedded with -tags flowmap, and driven in
+  # Chromium and Firefox against an in-process relay with real flows.
+  flowmap:
+    name: flow map (module, wasm, browsers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      # Node 26 hangs after unpacking a browser; 22 does not.
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - run: go version && node --version
+      - name: web/flowmap — gofmt, vet, -race tests
+        working-directory: web/flowmap
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "::error::not gofmt-ed:"; echo "$out"; exit 1; fi
+          go vet ./...
+          go test -race -count=1 -cover .
+      - name: wasm_exec.js is the toolchain's, and the page builds
+        run: |
+          go run ./internal/buildflowmap -check
+          go run ./internal/buildflowmap
+          go vet -tags flowmap ./server
+          go test -tags flowmap -count=1 -run FlowMap ./server
+      - name: Playwright driver and browsers
+        run: |
+          echo "PLAYWRIGHT_DRIVER_PATH=$RUNNER_TEMP/pwdriver" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_NODEJS_PATH=$(command -v node)" >> "$GITHUB_ENV"
+          go run github.com/go-wasmcontainers/playground/cmd/site@v0.1.0 playwright-driver --dir "$RUNNER_TEMP/pwdriver"
+          cd web/flowmap
+          PLAYWRIGHT_DRIVER_PATH="$RUNNER_TEMP/pwdriver" PLAYWRIGHT_NODEJS_PATH="$(command -v node)" \
+            go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps chromium firefox
+      - name: browsers (Chromium, Firefox)
+        working-directory: web/flowmap
+        run: go test -tags 'e2e flowmap' -count=1 -v -timeout 10m ./e2e
 
   cross:
     name: cross ${{ matrix.goos }}/${{ matrix.goarch }}

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Flow map · wctr-relay</title>
+<link rel="stylesheet" href="flowmap.css">
+<script src="wasm_exec.js" defer></script>
+<script src="flowmap.js" defer></script>
+</head>
+<body>
+<header>
+  <strong>Flow map</strong>
+  <label>Filter <input id="filter" type="search" autocomplete="off" spellcheck="false" placeholder="student, container, group"></label>
+  <span id="status" role="status" aria-live="polite">connecting…</span>
+</header>
+<main>
+  <canvas id="screen" tabindex="0" aria-label="network graph of the class: nodes are containers grouped by student, lines are flows, dashed red lines are refused flows"></canvas>
+</main>
+</body>
+</html>

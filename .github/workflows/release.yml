@@ -1,0 +1,46 @@
+name: release binaries
+# A published release gets wctr-relay binaries WITH the flow-map page
+# (-tags flowmap): the page's WebAssembly is about 5 MB, so it is built here
+# rather than committed, and a plain `go install` serves the page without it.
+on:
+  release: { types: [published] }
+permissions: { contents: read }
+jobs:
+  build:
+    name: wctr-relay ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: windows, goarch: amd64 }
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: '${{ github.event.release.tag_name }}' }
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: go run ./internal/buildflowmap
+      - name: build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          ext=""
+          if [ "$GOOS" = windows ]; then ext=.exe; fi
+          out="wctr-relay_${TAG}_${GOOS}_${GOARCH}${ext}"
+          CGO_ENABLED=0 go build -trimpath -tags flowmap \
+            -ldflags "-s -w -X github.com/go-wasmcontainers/relay/internal/cli.Version=${TAG}" \
+            -o "$out" ./cmd/wctr-relay
+          sha256sum "$out" > "$out.sha256"
+          echo "ASSET=$out" >> "$GITHUB_ENV"
+      - name: upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber

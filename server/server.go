@@ -96,6 +96,7 @@ type Principal struct {
 	Admin    bool
 	Session  *auth.Claims    // a student's (or the teacher's) session token
 	Identity *relay.Identity // an OpenID Connect identity
+	MapClass string          // a flow-map ticket's class: WatchFlowMap on it, nothing else
 }
 
 func principal(ctx context.Context) *Principal {
@@ -117,6 +118,9 @@ func bearer(r *http.Request) string {
 // sessionHeader carries a session token on control calls (the
 // Authorization header may hold the OIDC token at the same time).
 const sessionHeader = "Wctr-Session"
+
+// mapTicketHeader carries a flow-map ticket (FlowMapService.FlowMapTicket).
+const mapTicketHeader = "Wctr-Map-Ticket"
 
 func (s *Server) identity(ctx context.Context, raw string) *relay.Identity {
 	if s.cfg.OIDC == nil || raw == "" {
@@ -141,6 +145,7 @@ func (s *Server) Public() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/info", s.info)
 	mux.HandleFunc("GET /v1/data", s.data)
+	mux.Handle("GET /flowmap/", flowMapPage())
 	cs := connect.NewServer()
 	svc := &services{s: s}
 	relayv1connect.RegisterJoinServiceHandler(cs, svc)
@@ -169,6 +174,7 @@ func (s *Server) adminHandler(trusted bool) http.Handler {
 	cs := connect.NewServer()
 	svc := &services{s: s}
 	relayv1connect.RegisterClassServiceHandler(cs, svc)
+	relayv1connect.RegisterFlowMapServiceHandler(cs, svc)
 	relayv1connect.RegisterJoinServiceHandler(cs, svc)
 	relayv1connect.RegisterPortServiceHandler(cs, svc)
 	relayv1connect.RegisterFlowLogServiceHandler(cs, svc)
@@ -227,6 +233,11 @@ func (s *Server) guard(h http.Handler, admin bool) http.Handler {
 			if tok := r.Header.Get(sessionHeader); tok != "" {
 				if cl, err := s.cfg.Relay.Authenticate(tok); err == nil {
 					p.Session = &cl
+				}
+			}
+			if tok := r.Header.Get(mapTicketHeader); tok != "" {
+				if cls, err := s.cfg.Relay.VerifyMapTicket(tok); err == nil {
+					p.MapClass = cls
 				}
 			}
 			ctx = context.WithValue(ctx, principalKey{}, p)
