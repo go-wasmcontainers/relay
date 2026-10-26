@@ -4,7 +4,7 @@ What [go-wasmcontainers/engine](https://github.com/go-wasmcontainers/engine)
 implements so that its containers reach a class network through the relay.
 The relay side exists (package `driver` of this repository); the engine side is
 the engine's to write. Design:
-<https://go-wasmcontainers.github.io/docs/main/design/classroom-network/>.
+<https://go-wasmcontainers.github.io/docs/latest/design/classroom-network/>.
 
 ## The Go interface (in the engine)
 

@@ -1,6 +1,6 @@
 # relay
 
-[![Docs](https://img.shields.io/badge/docs-hugo%20%2B%20hextra-0079A8)](https://go-wasmcontainers.github.io/docs/main/design/classroom-network/)
+[![Docs](https://img.shields.io/badge/docs-hugo%20%2B%20hextra-0079A8)](https://go-wasmcontainers.github.io/docs/latest/relay/)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 [![CI](https://github.com/go-wasmcontainers/relay/actions/workflows/ci.yml/badge.svg)](https://github.com/go-wasmcontainers/relay/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/go-wasmcontainers/relay.svg)](https://pkg.go.dev/github.com/go-wasmcontainers/relay)
@@ -15,7 +15,8 @@ each container an address and a DNS name, and checks **every flow** against
 rules, enforced at both ends, stateful by connection tracking, with a flow
 log. The teacher manages it through a **gRPC control API** (connect-go: gRPC,
 gRPC-Web and the Connect protocol on one handler) and the `wctr-relay`
-command. Design: <https://go-wasmcontainers.github.io/docs/main/design/classroom-network/>.
+command. Documentation: <https://go-wasmcontainers.github.io/docs/latest/relay/>;
+design: <https://go-wasmcontainers.github.io/docs/latest/design/classroom-network/>.
 
 > **Status: M-relay-1 and M-relay-2.** The relay core, the data plane, the
 > firewall, the control API, the CLI, TLS (internal CA, files, ACME) and
