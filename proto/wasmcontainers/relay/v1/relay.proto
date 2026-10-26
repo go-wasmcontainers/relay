@@ -256,8 +256,71 @@ message WatchFlowsRequest {
   uint32 backlog = 4;
 }
 
+// The live flow map: what the relay's /flowmap/ page draws.
+message WatchFlowMapRequest {
+  string class_id = 1;
+  uint32 tick_ms = 2;  // default 250, at least 100
+}
+
+message MapCluster {
+  string id = 1;     // session id
+  string label = 2;  // session label
+  bool teacher = 3;
+}
+
+message MapNode {
+  string id = 1;       // port id
+  string label = 2;    // container name
+  string cluster = 3;  // session id
+  string ip = 4;
+  repeated string groups = 5;  // security group names
+}
+
+message MapEdge {
+  string id = 1;
+  string src_port = 2;
+  string dst_port = 3;
+  Protocol protocol = 4;
+  uint32 port = 5;          // destination port number
+  uint64 bytes = 6;         // since the edge appeared
+  double bytes_per_second = 7;
+  uint32 open = 8;          // streams open now
+  uint32 opened = 9;        // flows allowed since the edge appeared
+  uint32 denied = 10;
+  bool denied_recently = 11;  // a refusal in the last 3 seconds
+  string last_reason = 12;
+  string egress_rule_id = 13;
+  string ingress_rule_id = 14;
+}
+
+// One update per tick: the whole current map (a slow reader gets the newest
+// map, never a backlog) and the events since the previous update.
+message FlowMapUpdate {
+  uint64 seq = 1;
+  int64 time_unix_nano = 2;
+  repeated MapCluster clusters = 3;
+  repeated MapNode nodes = 4;
+  repeated MapEdge edges = 5;
+  repeated FlowEvent events = 6;
+  bool truncated = 7;         // nodes or edges past the caps were left out
+  uint32 dropped_events = 8;  // events lost because the reader was slow
+}
+
 service FlowLogService {
   rpc WatchFlows(WatchFlowsRequest) returns (stream FlowEvent);
+  // The flow map, for the teacher (admin, or a map ticket) or for one
+  // student (their session token: only their own flows).
+  rpc WatchFlowMap(WatchFlowMapRequest) returns (stream FlowMapUpdate);
+}
+
+message FlowMapTicketRequest { string class_id = 1; }
+message FlowMapTicketResponse { string ticket = 1; int64 expires_unix = 2; }
+
+// Admin only: a read-only ticket for the teacher's flow-map page in a
+// browser, which cannot use the admin socket. It grants WatchFlowMap on one
+// class and nothing else.
+service FlowMapService {
+  rpc FlowMapTicket(FlowMapTicketRequest) returns (FlowMapTicketResponse);
 }
 
 // ------------------------------------------------- data-plane control frames

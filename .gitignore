@@ -1,0 +1,2 @@
+# Built by `go run ./internal/buildflowmap` (about 5 MB); embedded with -tags flowmap.
+/server/flowmap/flowmap.wasm.gz

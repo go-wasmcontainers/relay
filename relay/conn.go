@@ -812,10 +812,16 @@ func (cn *conn) datagram(m *v1.Datagram) {
 		if exp, ok := c.track[flowKey{firewall.UDP, flow.Dst, flow.Src}]; ok && now.Before(exp) {
 			allowed = true // a reply to a tracked flow
 			c.track[flowKey{firewall.UDP, flow.Dst, flow.Src}] = now.Add(r.cfg.UDPIdle)
-		}
-		if exp, ok := c.track[flowKey{firewall.UDP, flow.Src, flow.Dst}]; ok && now.Before(exp) {
+			// Counted on the forward edge: a reply is part of its flow.
+			s := c.stat(edgeKey{dstPortID, m.PortId, firewall.UDP, flow.Src.Port()})
+			s.bytes += uint64(len(m.Payload))
+			s.lastSeen = now
+		} else if exp, ok := c.track[flowKey{firewall.UDP, flow.Src, flow.Dst}]; ok && now.Before(exp) {
 			allowed = true
 			c.track[flowKey{firewall.UDP, flow.Src, flow.Dst}] = now.Add(r.cfg.UDPIdle)
+			s := c.stat(edgeKey{m.PortId, dstPortID, firewall.UDP, flow.Dst.Port()})
+			s.bytes += uint64(len(m.Payload))
+			s.lastSeen = now
 		}
 	}
 	if !allowed {

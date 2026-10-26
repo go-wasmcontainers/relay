@@ -2567,6 +2567,541 @@ func (x *WatchFlowsRequest) GetBacklog() uint32 {
 	return 0
 }
 
+// The live flow map: what the relay's /flowmap/ page draws.
+type WatchFlowMapRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClassId       string                 `protobuf:"bytes,1,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
+	TickMs        uint32                 `protobuf:"varint,2,opt,name=tick_ms,json=tickMs,proto3" json:"tick_ms,omitempty"` // default 250, at least 100
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchFlowMapRequest) Reset() {
+	*x = WatchFlowMapRequest{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchFlowMapRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchFlowMapRequest) ProtoMessage() {}
+
+func (x *WatchFlowMapRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchFlowMapRequest.ProtoReflect.Descriptor instead.
+func (*WatchFlowMapRequest) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *WatchFlowMapRequest) GetClassId() string {
+	if x != nil {
+		return x.ClassId
+	}
+	return ""
+}
+
+func (x *WatchFlowMapRequest) GetTickMs() uint32 {
+	if x != nil {
+		return x.TickMs
+	}
+	return 0
+}
+
+type MapCluster struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`       // session id
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"` // session label
+	Teacher       bool                   `protobuf:"varint,3,opt,name=teacher,proto3" json:"teacher,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapCluster) Reset() {
+	*x = MapCluster{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapCluster) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapCluster) ProtoMessage() {}
+
+func (x *MapCluster) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapCluster.ProtoReflect.Descriptor instead.
+func (*MapCluster) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *MapCluster) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MapCluster) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MapCluster) GetTeacher() bool {
+	if x != nil {
+		return x.Teacher
+	}
+	return false
+}
+
+type MapNode struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`           // port id
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`     // container name
+	Cluster       string                 `protobuf:"bytes,3,opt,name=cluster,proto3" json:"cluster,omitempty"` // session id
+	Ip            string                 `protobuf:"bytes,4,opt,name=ip,proto3" json:"ip,omitempty"`
+	Groups        []string               `protobuf:"bytes,5,rep,name=groups,proto3" json:"groups,omitempty"` // security group names
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapNode) Reset() {
+	*x = MapNode{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapNode) ProtoMessage() {}
+
+func (x *MapNode) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapNode.ProtoReflect.Descriptor instead.
+func (*MapNode) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *MapNode) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MapNode) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MapNode) GetCluster() string {
+	if x != nil {
+		return x.Cluster
+	}
+	return ""
+}
+
+func (x *MapNode) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *MapNode) GetGroups() []string {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type MapEdge struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SrcPort        string                 `protobuf:"bytes,2,opt,name=src_port,json=srcPort,proto3" json:"src_port,omitempty"`
+	DstPort        string                 `protobuf:"bytes,3,opt,name=dst_port,json=dstPort,proto3" json:"dst_port,omitempty"`
+	Protocol       Protocol               `protobuf:"varint,4,opt,name=protocol,proto3,enum=wasmcontainers.relay.v1.Protocol" json:"protocol,omitempty"`
+	Port           uint32                 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`   // destination port number
+	Bytes          uint64                 `protobuf:"varint,6,opt,name=bytes,proto3" json:"bytes,omitempty"` // since the edge appeared
+	BytesPerSecond float64                `protobuf:"fixed64,7,opt,name=bytes_per_second,json=bytesPerSecond,proto3" json:"bytes_per_second,omitempty"`
+	Open           uint32                 `protobuf:"varint,8,opt,name=open,proto3" json:"open,omitempty"`     // streams open now
+	Opened         uint32                 `protobuf:"varint,9,opt,name=opened,proto3" json:"opened,omitempty"` // flows allowed since the edge appeared
+	Denied         uint32                 `protobuf:"varint,10,opt,name=denied,proto3" json:"denied,omitempty"`
+	DeniedRecently bool                   `protobuf:"varint,11,opt,name=denied_recently,json=deniedRecently,proto3" json:"denied_recently,omitempty"` // a refusal in the last 3 seconds
+	LastReason     string                 `protobuf:"bytes,12,opt,name=last_reason,json=lastReason,proto3" json:"last_reason,omitempty"`
+	EgressRuleId   string                 `protobuf:"bytes,13,opt,name=egress_rule_id,json=egressRuleId,proto3" json:"egress_rule_id,omitempty"`
+	IngressRuleId  string                 `protobuf:"bytes,14,opt,name=ingress_rule_id,json=ingressRuleId,proto3" json:"ingress_rule_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MapEdge) Reset() {
+	*x = MapEdge{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapEdge) ProtoMessage() {}
+
+func (x *MapEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapEdge.ProtoReflect.Descriptor instead.
+func (*MapEdge) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *MapEdge) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MapEdge) GetSrcPort() string {
+	if x != nil {
+		return x.SrcPort
+	}
+	return ""
+}
+
+func (x *MapEdge) GetDstPort() string {
+	if x != nil {
+		return x.DstPort
+	}
+	return ""
+}
+
+func (x *MapEdge) GetProtocol() Protocol {
+	if x != nil {
+		return x.Protocol
+	}
+	return Protocol_PROTOCOL_ANY
+}
+
+func (x *MapEdge) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *MapEdge) GetBytes() uint64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+func (x *MapEdge) GetBytesPerSecond() float64 {
+	if x != nil {
+		return x.BytesPerSecond
+	}
+	return 0
+}
+
+func (x *MapEdge) GetOpen() uint32 {
+	if x != nil {
+		return x.Open
+	}
+	return 0
+}
+
+func (x *MapEdge) GetOpened() uint32 {
+	if x != nil {
+		return x.Opened
+	}
+	return 0
+}
+
+func (x *MapEdge) GetDenied() uint32 {
+	if x != nil {
+		return x.Denied
+	}
+	return 0
+}
+
+func (x *MapEdge) GetDeniedRecently() bool {
+	if x != nil {
+		return x.DeniedRecently
+	}
+	return false
+}
+
+func (x *MapEdge) GetLastReason() string {
+	if x != nil {
+		return x.LastReason
+	}
+	return ""
+}
+
+func (x *MapEdge) GetEgressRuleId() string {
+	if x != nil {
+		return x.EgressRuleId
+	}
+	return ""
+}
+
+func (x *MapEdge) GetIngressRuleId() string {
+	if x != nil {
+		return x.IngressRuleId
+	}
+	return ""
+}
+
+// One update per tick: the whole current map (a slow reader gets the newest
+// map, never a backlog) and the events since the previous update.
+type FlowMapUpdate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Seq           uint64                 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
+	TimeUnixNano  int64                  `protobuf:"varint,2,opt,name=time_unix_nano,json=timeUnixNano,proto3" json:"time_unix_nano,omitempty"`
+	Clusters      []*MapCluster          `protobuf:"bytes,3,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	Nodes         []*MapNode             `protobuf:"bytes,4,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	Edges         []*MapEdge             `protobuf:"bytes,5,rep,name=edges,proto3" json:"edges,omitempty"`
+	Events        []*FlowEvent           `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
+	Truncated     bool                   `protobuf:"varint,7,opt,name=truncated,proto3" json:"truncated,omitempty"`                              // nodes or edges past the caps were left out
+	DroppedEvents uint32                 `protobuf:"varint,8,opt,name=dropped_events,json=droppedEvents,proto3" json:"dropped_events,omitempty"` // events lost because the reader was slow
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowMapUpdate) Reset() {
+	*x = FlowMapUpdate{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowMapUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowMapUpdate) ProtoMessage() {}
+
+func (x *FlowMapUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowMapUpdate.ProtoReflect.Descriptor instead.
+func (*FlowMapUpdate) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *FlowMapUpdate) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *FlowMapUpdate) GetTimeUnixNano() int64 {
+	if x != nil {
+		return x.TimeUnixNano
+	}
+	return 0
+}
+
+func (x *FlowMapUpdate) GetClusters() []*MapCluster {
+	if x != nil {
+		return x.Clusters
+	}
+	return nil
+}
+
+func (x *FlowMapUpdate) GetNodes() []*MapNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *FlowMapUpdate) GetEdges() []*MapEdge {
+	if x != nil {
+		return x.Edges
+	}
+	return nil
+}
+
+func (x *FlowMapUpdate) GetEvents() []*FlowEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *FlowMapUpdate) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *FlowMapUpdate) GetDroppedEvents() uint32 {
+	if x != nil {
+		return x.DroppedEvents
+	}
+	return 0
+}
+
+type FlowMapTicketRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClassId       string                 `protobuf:"bytes,1,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowMapTicketRequest) Reset() {
+	*x = FlowMapTicketRequest{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowMapTicketRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowMapTicketRequest) ProtoMessage() {}
+
+func (x *FlowMapTicketRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowMapTicketRequest.ProtoReflect.Descriptor instead.
+func (*FlowMapTicketRequest) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *FlowMapTicketRequest) GetClassId() string {
+	if x != nil {
+		return x.ClassId
+	}
+	return ""
+}
+
+type FlowMapTicketResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ticket        string                 `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
+	ExpiresUnix   int64                  `protobuf:"varint,2,opt,name=expires_unix,json=expiresUnix,proto3" json:"expires_unix,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlowMapTicketResponse) Reset() {
+	*x = FlowMapTicketResponse{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlowMapTicketResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlowMapTicketResponse) ProtoMessage() {}
+
+func (x *FlowMapTicketResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlowMapTicketResponse.ProtoReflect.Descriptor instead.
+func (*FlowMapTicketResponse) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *FlowMapTicketResponse) GetTicket() string {
+	if x != nil {
+		return x.Ticket
+	}
+	return ""
+}
+
+func (x *FlowMapTicketResponse) GetExpiresUnix() int64 {
+	if x != nil {
+		return x.ExpiresUnix
+	}
+	return 0
+}
+
 type Hello struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       uint32                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"` // frame protocol version, 1
@@ -2577,7 +3112,7 @@ type Hello struct {
 
 func (x *Hello) Reset() {
 	*x = Hello{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[36]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2589,7 +3124,7 @@ func (x *Hello) String() string {
 func (*Hello) ProtoMessage() {}
 
 func (x *Hello) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[36]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2602,7 +3137,7 @@ func (x *Hello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Hello.ProtoReflect.Descriptor instead.
 func (*Hello) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{36}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *Hello) GetVersion() uint32 {
@@ -2636,7 +3171,7 @@ type Welcome struct {
 
 func (x *Welcome) Reset() {
 	*x = Welcome{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[37]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2648,7 +3183,7 @@ func (x *Welcome) String() string {
 func (*Welcome) ProtoMessage() {}
 
 func (x *Welcome) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[37]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2661,7 +3196,7 @@ func (x *Welcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Welcome.ProtoReflect.Descriptor instead.
 func (*Welcome) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{37}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *Welcome) GetVersion() uint32 {
@@ -2728,7 +3263,7 @@ type Limits struct {
 
 func (x *Limits) Reset() {
 	*x = Limits{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[38]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2740,7 +3275,7 @@ func (x *Limits) String() string {
 func (*Limits) ProtoMessage() {}
 
 func (x *Limits) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[38]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2753,7 +3288,7 @@ func (x *Limits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Limits.ProtoReflect.Descriptor instead.
 func (*Limits) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{38}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *Limits) GetMaxStreams() uint32 {
@@ -2814,7 +3349,7 @@ type Attach struct {
 
 func (x *Attach) Reset() {
 	*x = Attach{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[39]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2826,7 +3361,7 @@ func (x *Attach) String() string {
 func (*Attach) ProtoMessage() {}
 
 func (x *Attach) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[39]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2839,7 +3374,7 @@ func (x *Attach) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attach.ProtoReflect.Descriptor instead.
 func (*Attach) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{39}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *Attach) GetContainer() string {
@@ -2858,7 +3393,7 @@ type Attached struct {
 
 func (x *Attached) Reset() {
 	*x = Attached{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[40]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2870,7 +3405,7 @@ func (x *Attached) String() string {
 func (*Attached) ProtoMessage() {}
 
 func (x *Attached) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[40]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2883,7 +3418,7 @@ func (x *Attached) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attached.ProtoReflect.Descriptor instead.
 func (*Attached) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{40}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *Attached) GetPort() *Port {
@@ -2902,7 +3437,7 @@ type Detach struct {
 
 func (x *Detach) Reset() {
 	*x = Detach{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[41]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2914,7 +3449,7 @@ func (x *Detach) String() string {
 func (*Detach) ProtoMessage() {}
 
 func (x *Detach) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[41]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2927,7 +3462,7 @@ func (x *Detach) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Detach.ProtoReflect.Descriptor instead.
 func (*Detach) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{41}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *Detach) GetPortId() string {
@@ -2948,7 +3483,7 @@ type Listen struct {
 
 func (x *Listen) Reset() {
 	*x = Listen{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[42]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2960,7 +3495,7 @@ func (x *Listen) String() string {
 func (*Listen) ProtoMessage() {}
 
 func (x *Listen) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[42]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2973,7 +3508,7 @@ func (x *Listen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Listen.ProtoReflect.Descriptor instead.
 func (*Listen) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{42}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *Listen) GetPortId() string {
@@ -3006,7 +3541,7 @@ type Listening struct {
 
 func (x *Listening) Reset() {
 	*x = Listening{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[43]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3018,7 +3553,7 @@ func (x *Listening) String() string {
 func (*Listening) ProtoMessage() {}
 
 func (x *Listening) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[43]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3031,7 +3566,7 @@ func (x *Listening) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Listening.ProtoReflect.Descriptor instead.
 func (*Listening) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{43}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *Listening) GetPort() uint32 {
@@ -3052,7 +3587,7 @@ type Unlisten struct {
 
 func (x *Unlisten) Reset() {
 	*x = Unlisten{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[44]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3064,7 +3599,7 @@ func (x *Unlisten) String() string {
 func (*Unlisten) ProtoMessage() {}
 
 func (x *Unlisten) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[44]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3077,7 +3612,7 @@ func (x *Unlisten) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unlisten.ProtoReflect.Descriptor instead.
 func (*Unlisten) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{44}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *Unlisten) GetPortId() string {
@@ -3112,7 +3647,7 @@ type Connect struct {
 
 func (x *Connect) Reset() {
 	*x = Connect{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3124,7 +3659,7 @@ func (x *Connect) String() string {
 func (*Connect) ProtoMessage() {}
 
 func (x *Connect) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3137,7 +3672,7 @@ func (x *Connect) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Connect.ProtoReflect.Descriptor instead.
 func (*Connect) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{45}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *Connect) GetPortId() string {
@@ -3174,7 +3709,7 @@ type Incoming struct {
 
 func (x *Incoming) Reset() {
 	*x = Incoming{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3186,7 +3721,7 @@ func (x *Incoming) String() string {
 func (*Incoming) ProtoMessage() {}
 
 func (x *Incoming) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3199,7 +3734,7 @@ func (x *Incoming) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Incoming.ProtoReflect.Descriptor instead.
 func (*Incoming) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{46}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *Incoming) GetPortId() string {
@@ -3240,7 +3775,7 @@ type Accepted struct {
 
 func (x *Accepted) Reset() {
 	*x = Accepted{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3252,7 +3787,7 @@ func (x *Accepted) String() string {
 func (*Accepted) ProtoMessage() {}
 
 func (x *Accepted) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3265,7 +3800,7 @@ func (x *Accepted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Accepted.ProtoReflect.Descriptor instead.
 func (*Accepted) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{47}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *Accepted) GetSrcIp() string {
@@ -3297,7 +3832,7 @@ type Datagram struct {
 
 func (x *Datagram) Reset() {
 	*x = Datagram{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3309,7 +3844,7 @@ func (x *Datagram) String() string {
 func (*Datagram) ProtoMessage() {}
 
 func (x *Datagram) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3322,7 +3857,7 @@ func (x *Datagram) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Datagram.ProtoReflect.Descriptor instead.
 func (*Datagram) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{48}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *Datagram) GetPortId() string {
@@ -3377,7 +3912,7 @@ type Resolve struct {
 
 func (x *Resolve) Reset() {
 	*x = Resolve{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3389,7 +3924,7 @@ func (x *Resolve) String() string {
 func (*Resolve) ProtoMessage() {}
 
 func (x *Resolve) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3402,7 +3937,7 @@ func (x *Resolve) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resolve.ProtoReflect.Descriptor instead.
 func (*Resolve) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{49}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *Resolve) GetName() string {
@@ -3428,7 +3963,7 @@ type Resolved struct {
 
 func (x *Resolved) Reset() {
 	*x = Resolved{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3440,7 +3975,7 @@ func (x *Resolved) String() string {
 func (*Resolved) ProtoMessage() {}
 
 func (x *Resolved) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3453,7 +3988,7 @@ func (x *Resolved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resolved.ProtoReflect.Descriptor instead.
 func (*Resolved) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{50}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *Resolved) GetIps() []string {
@@ -3473,7 +4008,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3485,7 +4020,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3498,7 +4033,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{51}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *Result) GetCode() Code {
@@ -3680,7 +4215,52 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\bclass_id\x18\x01 \x01(\tR\aclassId\x12\x1b\n" +
 	"\tdeny_only\x18\x02 \x01(\bR\bdenyOnly\x12\x18\n" +
 	"\asession\x18\x03 \x01(\tR\asession\x12\x18\n" +
-	"\abacklog\x18\x04 \x01(\rR\abacklog\"F\n" +
+	"\abacklog\x18\x04 \x01(\rR\abacklog\"I\n" +
+	"\x13WatchFlowMapRequest\x12\x19\n" +
+	"\bclass_id\x18\x01 \x01(\tR\aclassId\x12\x17\n" +
+	"\atick_ms\x18\x02 \x01(\rR\x06tickMs\"L\n" +
+	"\n" +
+	"MapCluster\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +
+	"\ateacher\x18\x03 \x01(\bR\ateacher\"q\n" +
+	"\aMapNode\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +
+	"\acluster\x18\x03 \x01(\tR\acluster\x12\x0e\n" +
+	"\x02ip\x18\x04 \x01(\tR\x02ip\x12\x16\n" +
+	"\x06groups\x18\x05 \x03(\tR\x06groups\"\xbe\x03\n" +
+	"\aMapEdge\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
+	"\bsrc_port\x18\x02 \x01(\tR\asrcPort\x12\x19\n" +
+	"\bdst_port\x18\x03 \x01(\tR\adstPort\x12=\n" +
+	"\bprotocol\x18\x04 \x01(\x0e2!.wasmcontainers.relay.v1.ProtocolR\bprotocol\x12\x12\n" +
+	"\x04port\x18\x05 \x01(\rR\x04port\x12\x14\n" +
+	"\x05bytes\x18\x06 \x01(\x04R\x05bytes\x12(\n" +
+	"\x10bytes_per_second\x18\a \x01(\x01R\x0ebytesPerSecond\x12\x12\n" +
+	"\x04open\x18\b \x01(\rR\x04open\x12\x16\n" +
+	"\x06opened\x18\t \x01(\rR\x06opened\x12\x16\n" +
+	"\x06denied\x18\n" +
+	" \x01(\rR\x06denied\x12'\n" +
+	"\x0fdenied_recently\x18\v \x01(\bR\x0edeniedRecently\x12\x1f\n" +
+	"\vlast_reason\x18\f \x01(\tR\n" +
+	"lastReason\x12$\n" +
+	"\x0eegress_rule_id\x18\r \x01(\tR\fegressRuleId\x12&\n" +
+	"\x0fingress_rule_id\x18\x0e \x01(\tR\ringressRuleId\"\xf9\x02\n" +
+	"\rFlowMapUpdate\x12\x10\n" +
+	"\x03seq\x18\x01 \x01(\x04R\x03seq\x12$\n" +
+	"\x0etime_unix_nano\x18\x02 \x01(\x03R\ftimeUnixNano\x12?\n" +
+	"\bclusters\x18\x03 \x03(\v2#.wasmcontainers.relay.v1.MapClusterR\bclusters\x126\n" +
+	"\x05nodes\x18\x04 \x03(\v2 .wasmcontainers.relay.v1.MapNodeR\x05nodes\x126\n" +
+	"\x05edges\x18\x05 \x03(\v2 .wasmcontainers.relay.v1.MapEdgeR\x05edges\x12:\n" +
+	"\x06events\x18\x06 \x03(\v2\".wasmcontainers.relay.v1.FlowEventR\x06events\x12\x1c\n" +
+	"\ttruncated\x18\a \x01(\bR\ttruncated\x12%\n" +
+	"\x0edropped_events\x18\b \x01(\rR\rdroppedEvents\"1\n" +
+	"\x14FlowMapTicketRequest\x12\x19\n" +
+	"\bclass_id\x18\x01 \x01(\tR\aclassId\"R\n" +
+	"\x15FlowMapTicketResponse\x12\x16\n" +
+	"\x06ticket\x18\x01 \x01(\tR\x06ticket\x12!\n" +
+	"\fexpires_unix\x18\x02 \x01(\x03R\vexpiresUnix\"F\n" +
 	"\x05Hello\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12#\n" +
 	"\rsession_token\x18\x02 \x01(\tR\fsessionToken\"\xb3\x02\n" +
@@ -3803,10 +4383,13 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\vPortService\x12b\n" +
 	"\tListPorts\x12).wasmcontainers.relay.v1.ListPortsRequest\x1a*.wasmcontainers.relay.v1.ListPortsResponse\x12W\n" +
 	"\n" +
-	"UpdatePort\x12*.wasmcontainers.relay.v1.UpdatePortRequest\x1a\x1d.wasmcontainers.relay.v1.Port2p\n" +
+	"UpdatePort\x12*.wasmcontainers.relay.v1.UpdatePortRequest\x1a\x1d.wasmcontainers.relay.v1.Port2\xd8\x01\n" +
 	"\x0eFlowLogService\x12^\n" +
 	"\n" +
-	"WatchFlows\x12*.wasmcontainers.relay.v1.WatchFlowsRequest\x1a\".wasmcontainers.relay.v1.FlowEvent0\x01B8Z6github.com/go-wasmcontainers/relay/gen/relayv1;relayv1b\x06proto3"
+	"WatchFlows\x12*.wasmcontainers.relay.v1.WatchFlowsRequest\x1a\".wasmcontainers.relay.v1.FlowEvent0\x01\x12f\n" +
+	"\fWatchFlowMap\x12,.wasmcontainers.relay.v1.WatchFlowMapRequest\x1a&.wasmcontainers.relay.v1.FlowMapUpdate0\x012\x80\x01\n" +
+	"\x0eFlowMapService\x12n\n" +
+	"\rFlowMapTicket\x12-.wasmcontainers.relay.v1.FlowMapTicketRequest\x1a..wasmcontainers.relay.v1.FlowMapTicketResponseB8Z6github.com/go-wasmcontainers/relay/gen/relayv1;relayv1b\x06proto3"
 
 var (
 	file_wasmcontainers_relay_v1_relay_proto_rawDescOnce sync.Once
@@ -3821,7 +4404,7 @@ func file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP() []byte {
 }
 
 var file_wasmcontainers_relay_v1_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_wasmcontainers_relay_v1_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_wasmcontainers_relay_v1_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_wasmcontainers_relay_v1_relay_proto_goTypes = []any{
 	(Direction)(0),                      // 0: wasmcontainers.relay.v1.Direction
 	(Protocol)(0),                       // 1: wasmcontainers.relay.v1.Protocol
@@ -3864,22 +4447,29 @@ var file_wasmcontainers_relay_v1_relay_proto_goTypes = []any{
 	(*ListPortsResponse)(nil),           // 38: wasmcontainers.relay.v1.ListPortsResponse
 	(*UpdatePortRequest)(nil),           // 39: wasmcontainers.relay.v1.UpdatePortRequest
 	(*WatchFlowsRequest)(nil),           // 40: wasmcontainers.relay.v1.WatchFlowsRequest
-	(*Hello)(nil),                       // 41: wasmcontainers.relay.v1.Hello
-	(*Welcome)(nil),                     // 42: wasmcontainers.relay.v1.Welcome
-	(*Limits)(nil),                      // 43: wasmcontainers.relay.v1.Limits
-	(*Attach)(nil),                      // 44: wasmcontainers.relay.v1.Attach
-	(*Attached)(nil),                    // 45: wasmcontainers.relay.v1.Attached
-	(*Detach)(nil),                      // 46: wasmcontainers.relay.v1.Detach
-	(*Listen)(nil),                      // 47: wasmcontainers.relay.v1.Listen
-	(*Listening)(nil),                   // 48: wasmcontainers.relay.v1.Listening
-	(*Unlisten)(nil),                    // 49: wasmcontainers.relay.v1.Unlisten
-	(*Connect)(nil),                     // 50: wasmcontainers.relay.v1.Connect
-	(*Incoming)(nil),                    // 51: wasmcontainers.relay.v1.Incoming
-	(*Accepted)(nil),                    // 52: wasmcontainers.relay.v1.Accepted
-	(*Datagram)(nil),                    // 53: wasmcontainers.relay.v1.Datagram
-	(*Resolve)(nil),                     // 54: wasmcontainers.relay.v1.Resolve
-	(*Resolved)(nil),                    // 55: wasmcontainers.relay.v1.Resolved
-	(*Result)(nil),                      // 56: wasmcontainers.relay.v1.Result
+	(*WatchFlowMapRequest)(nil),         // 41: wasmcontainers.relay.v1.WatchFlowMapRequest
+	(*MapCluster)(nil),                  // 42: wasmcontainers.relay.v1.MapCluster
+	(*MapNode)(nil),                     // 43: wasmcontainers.relay.v1.MapNode
+	(*MapEdge)(nil),                     // 44: wasmcontainers.relay.v1.MapEdge
+	(*FlowMapUpdate)(nil),               // 45: wasmcontainers.relay.v1.FlowMapUpdate
+	(*FlowMapTicketRequest)(nil),        // 46: wasmcontainers.relay.v1.FlowMapTicketRequest
+	(*FlowMapTicketResponse)(nil),       // 47: wasmcontainers.relay.v1.FlowMapTicketResponse
+	(*Hello)(nil),                       // 48: wasmcontainers.relay.v1.Hello
+	(*Welcome)(nil),                     // 49: wasmcontainers.relay.v1.Welcome
+	(*Limits)(nil),                      // 50: wasmcontainers.relay.v1.Limits
+	(*Attach)(nil),                      // 51: wasmcontainers.relay.v1.Attach
+	(*Attached)(nil),                    // 52: wasmcontainers.relay.v1.Attached
+	(*Detach)(nil),                      // 53: wasmcontainers.relay.v1.Detach
+	(*Listen)(nil),                      // 54: wasmcontainers.relay.v1.Listen
+	(*Listening)(nil),                   // 55: wasmcontainers.relay.v1.Listening
+	(*Unlisten)(nil),                    // 56: wasmcontainers.relay.v1.Unlisten
+	(*Connect)(nil),                     // 57: wasmcontainers.relay.v1.Connect
+	(*Incoming)(nil),                    // 58: wasmcontainers.relay.v1.Incoming
+	(*Accepted)(nil),                    // 59: wasmcontainers.relay.v1.Accepted
+	(*Datagram)(nil),                    // 60: wasmcontainers.relay.v1.Datagram
+	(*Resolve)(nil),                     // 61: wasmcontainers.relay.v1.Resolve
+	(*Resolved)(nil),                    // 62: wasmcontainers.relay.v1.Resolved
+	(*Result)(nil),                      // 63: wasmcontainers.relay.v1.Result
 }
 var file_wasmcontainers_relay_v1_relay_proto_depIdxs = []int32{
 	6,  // 0: wasmcontainers.relay.v1.Class.network:type_name -> wasmcontainers.relay.v1.Network
@@ -3898,56 +4488,65 @@ var file_wasmcontainers_relay_v1_relay_proto_depIdxs = []int32{
 	10, // 13: wasmcontainers.relay.v1.CreateRuleRequest.rule:type_name -> wasmcontainers.relay.v1.SecurityGroupRule
 	1,  // 14: wasmcontainers.relay.v1.ExplainFlowRequest.protocol:type_name -> wasmcontainers.relay.v1.Protocol
 	8,  // 15: wasmcontainers.relay.v1.ListPortsResponse.ports:type_name -> wasmcontainers.relay.v1.Port
-	7,  // 16: wasmcontainers.relay.v1.Welcome.session:type_name -> wasmcontainers.relay.v1.Session
-	6,  // 17: wasmcontainers.relay.v1.Welcome.network:type_name -> wasmcontainers.relay.v1.Network
-	43, // 18: wasmcontainers.relay.v1.Welcome.limits:type_name -> wasmcontainers.relay.v1.Limits
-	8,  // 19: wasmcontainers.relay.v1.Attached.port:type_name -> wasmcontainers.relay.v1.Port
-	1,  // 20: wasmcontainers.relay.v1.Listen.protocol:type_name -> wasmcontainers.relay.v1.Protocol
-	1,  // 21: wasmcontainers.relay.v1.Unlisten.protocol:type_name -> wasmcontainers.relay.v1.Protocol
-	4,  // 22: wasmcontainers.relay.v1.Result.code:type_name -> wasmcontainers.relay.v1.Code
-	12, // 23: wasmcontainers.relay.v1.ClassService.CreateClass:input_type -> wasmcontainers.relay.v1.CreateClassRequest
-	13, // 24: wasmcontainers.relay.v1.ClassService.GetClass:input_type -> wasmcontainers.relay.v1.GetClassRequest
-	14, // 25: wasmcontainers.relay.v1.ClassService.DeleteClass:input_type -> wasmcontainers.relay.v1.DeleteClassRequest
-	16, // 26: wasmcontainers.relay.v1.ClassService.ListClasses:input_type -> wasmcontainers.relay.v1.ListClassesRequest
-	18, // 27: wasmcontainers.relay.v1.ClassService.RotateJoinCode:input_type -> wasmcontainers.relay.v1.RotateJoinCodeRequest
-	19, // 28: wasmcontainers.relay.v1.ClassService.ListSessions:input_type -> wasmcontainers.relay.v1.ListSessionsRequest
-	21, // 29: wasmcontainers.relay.v1.ClassService.KickSession:input_type -> wasmcontainers.relay.v1.KickSessionRequest
-	23, // 30: wasmcontainers.relay.v1.JoinService.Join:input_type -> wasmcontainers.relay.v1.JoinRequest
-	26, // 31: wasmcontainers.relay.v1.JoinService.RefreshSession:input_type -> wasmcontainers.relay.v1.RefreshSessionRequest
-	25, // 32: wasmcontainers.relay.v1.JoinService.TeacherSession:input_type -> wasmcontainers.relay.v1.TeacherSessionRequest
-	28, // 33: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:input_type -> wasmcontainers.relay.v1.ListSecurityGroupsRequest
-	30, // 34: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:input_type -> wasmcontainers.relay.v1.CreateSecurityGroupRequest
-	31, // 35: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:input_type -> wasmcontainers.relay.v1.DeleteSecurityGroupRequest
-	33, // 36: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:input_type -> wasmcontainers.relay.v1.CreateRuleRequest
-	34, // 37: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:input_type -> wasmcontainers.relay.v1.DeleteRuleRequest
-	36, // 38: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:input_type -> wasmcontainers.relay.v1.ExplainFlowRequest
-	37, // 39: wasmcontainers.relay.v1.PortService.ListPorts:input_type -> wasmcontainers.relay.v1.ListPortsRequest
-	39, // 40: wasmcontainers.relay.v1.PortService.UpdatePort:input_type -> wasmcontainers.relay.v1.UpdatePortRequest
-	40, // 41: wasmcontainers.relay.v1.FlowLogService.WatchFlows:input_type -> wasmcontainers.relay.v1.WatchFlowsRequest
-	5,  // 42: wasmcontainers.relay.v1.ClassService.CreateClass:output_type -> wasmcontainers.relay.v1.Class
-	5,  // 43: wasmcontainers.relay.v1.ClassService.GetClass:output_type -> wasmcontainers.relay.v1.Class
-	15, // 44: wasmcontainers.relay.v1.ClassService.DeleteClass:output_type -> wasmcontainers.relay.v1.DeleteClassResponse
-	17, // 45: wasmcontainers.relay.v1.ClassService.ListClasses:output_type -> wasmcontainers.relay.v1.ListClassesResponse
-	5,  // 46: wasmcontainers.relay.v1.ClassService.RotateJoinCode:output_type -> wasmcontainers.relay.v1.Class
-	20, // 47: wasmcontainers.relay.v1.ClassService.ListSessions:output_type -> wasmcontainers.relay.v1.ListSessionsResponse
-	22, // 48: wasmcontainers.relay.v1.ClassService.KickSession:output_type -> wasmcontainers.relay.v1.KickSessionResponse
-	24, // 49: wasmcontainers.relay.v1.JoinService.Join:output_type -> wasmcontainers.relay.v1.JoinResponse
-	27, // 50: wasmcontainers.relay.v1.JoinService.RefreshSession:output_type -> wasmcontainers.relay.v1.RefreshSessionResponse
-	24, // 51: wasmcontainers.relay.v1.JoinService.TeacherSession:output_type -> wasmcontainers.relay.v1.JoinResponse
-	29, // 52: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:output_type -> wasmcontainers.relay.v1.ListSecurityGroupsResponse
-	9,  // 53: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:output_type -> wasmcontainers.relay.v1.SecurityGroup
-	32, // 54: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:output_type -> wasmcontainers.relay.v1.DeleteSecurityGroupResponse
-	10, // 55: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:output_type -> wasmcontainers.relay.v1.SecurityGroupRule
-	35, // 56: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:output_type -> wasmcontainers.relay.v1.DeleteRuleResponse
-	11, // 57: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:output_type -> wasmcontainers.relay.v1.FlowEvent
-	38, // 58: wasmcontainers.relay.v1.PortService.ListPorts:output_type -> wasmcontainers.relay.v1.ListPortsResponse
-	8,  // 59: wasmcontainers.relay.v1.PortService.UpdatePort:output_type -> wasmcontainers.relay.v1.Port
-	11, // 60: wasmcontainers.relay.v1.FlowLogService.WatchFlows:output_type -> wasmcontainers.relay.v1.FlowEvent
-	42, // [42:61] is the sub-list for method output_type
-	23, // [23:42] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	1,  // 16: wasmcontainers.relay.v1.MapEdge.protocol:type_name -> wasmcontainers.relay.v1.Protocol
+	42, // 17: wasmcontainers.relay.v1.FlowMapUpdate.clusters:type_name -> wasmcontainers.relay.v1.MapCluster
+	43, // 18: wasmcontainers.relay.v1.FlowMapUpdate.nodes:type_name -> wasmcontainers.relay.v1.MapNode
+	44, // 19: wasmcontainers.relay.v1.FlowMapUpdate.edges:type_name -> wasmcontainers.relay.v1.MapEdge
+	11, // 20: wasmcontainers.relay.v1.FlowMapUpdate.events:type_name -> wasmcontainers.relay.v1.FlowEvent
+	7,  // 21: wasmcontainers.relay.v1.Welcome.session:type_name -> wasmcontainers.relay.v1.Session
+	6,  // 22: wasmcontainers.relay.v1.Welcome.network:type_name -> wasmcontainers.relay.v1.Network
+	50, // 23: wasmcontainers.relay.v1.Welcome.limits:type_name -> wasmcontainers.relay.v1.Limits
+	8,  // 24: wasmcontainers.relay.v1.Attached.port:type_name -> wasmcontainers.relay.v1.Port
+	1,  // 25: wasmcontainers.relay.v1.Listen.protocol:type_name -> wasmcontainers.relay.v1.Protocol
+	1,  // 26: wasmcontainers.relay.v1.Unlisten.protocol:type_name -> wasmcontainers.relay.v1.Protocol
+	4,  // 27: wasmcontainers.relay.v1.Result.code:type_name -> wasmcontainers.relay.v1.Code
+	12, // 28: wasmcontainers.relay.v1.ClassService.CreateClass:input_type -> wasmcontainers.relay.v1.CreateClassRequest
+	13, // 29: wasmcontainers.relay.v1.ClassService.GetClass:input_type -> wasmcontainers.relay.v1.GetClassRequest
+	14, // 30: wasmcontainers.relay.v1.ClassService.DeleteClass:input_type -> wasmcontainers.relay.v1.DeleteClassRequest
+	16, // 31: wasmcontainers.relay.v1.ClassService.ListClasses:input_type -> wasmcontainers.relay.v1.ListClassesRequest
+	18, // 32: wasmcontainers.relay.v1.ClassService.RotateJoinCode:input_type -> wasmcontainers.relay.v1.RotateJoinCodeRequest
+	19, // 33: wasmcontainers.relay.v1.ClassService.ListSessions:input_type -> wasmcontainers.relay.v1.ListSessionsRequest
+	21, // 34: wasmcontainers.relay.v1.ClassService.KickSession:input_type -> wasmcontainers.relay.v1.KickSessionRequest
+	23, // 35: wasmcontainers.relay.v1.JoinService.Join:input_type -> wasmcontainers.relay.v1.JoinRequest
+	26, // 36: wasmcontainers.relay.v1.JoinService.RefreshSession:input_type -> wasmcontainers.relay.v1.RefreshSessionRequest
+	25, // 37: wasmcontainers.relay.v1.JoinService.TeacherSession:input_type -> wasmcontainers.relay.v1.TeacherSessionRequest
+	28, // 38: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:input_type -> wasmcontainers.relay.v1.ListSecurityGroupsRequest
+	30, // 39: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:input_type -> wasmcontainers.relay.v1.CreateSecurityGroupRequest
+	31, // 40: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:input_type -> wasmcontainers.relay.v1.DeleteSecurityGroupRequest
+	33, // 41: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:input_type -> wasmcontainers.relay.v1.CreateRuleRequest
+	34, // 42: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:input_type -> wasmcontainers.relay.v1.DeleteRuleRequest
+	36, // 43: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:input_type -> wasmcontainers.relay.v1.ExplainFlowRequest
+	37, // 44: wasmcontainers.relay.v1.PortService.ListPorts:input_type -> wasmcontainers.relay.v1.ListPortsRequest
+	39, // 45: wasmcontainers.relay.v1.PortService.UpdatePort:input_type -> wasmcontainers.relay.v1.UpdatePortRequest
+	40, // 46: wasmcontainers.relay.v1.FlowLogService.WatchFlows:input_type -> wasmcontainers.relay.v1.WatchFlowsRequest
+	41, // 47: wasmcontainers.relay.v1.FlowLogService.WatchFlowMap:input_type -> wasmcontainers.relay.v1.WatchFlowMapRequest
+	46, // 48: wasmcontainers.relay.v1.FlowMapService.FlowMapTicket:input_type -> wasmcontainers.relay.v1.FlowMapTicketRequest
+	5,  // 49: wasmcontainers.relay.v1.ClassService.CreateClass:output_type -> wasmcontainers.relay.v1.Class
+	5,  // 50: wasmcontainers.relay.v1.ClassService.GetClass:output_type -> wasmcontainers.relay.v1.Class
+	15, // 51: wasmcontainers.relay.v1.ClassService.DeleteClass:output_type -> wasmcontainers.relay.v1.DeleteClassResponse
+	17, // 52: wasmcontainers.relay.v1.ClassService.ListClasses:output_type -> wasmcontainers.relay.v1.ListClassesResponse
+	5,  // 53: wasmcontainers.relay.v1.ClassService.RotateJoinCode:output_type -> wasmcontainers.relay.v1.Class
+	20, // 54: wasmcontainers.relay.v1.ClassService.ListSessions:output_type -> wasmcontainers.relay.v1.ListSessionsResponse
+	22, // 55: wasmcontainers.relay.v1.ClassService.KickSession:output_type -> wasmcontainers.relay.v1.KickSessionResponse
+	24, // 56: wasmcontainers.relay.v1.JoinService.Join:output_type -> wasmcontainers.relay.v1.JoinResponse
+	27, // 57: wasmcontainers.relay.v1.JoinService.RefreshSession:output_type -> wasmcontainers.relay.v1.RefreshSessionResponse
+	24, // 58: wasmcontainers.relay.v1.JoinService.TeacherSession:output_type -> wasmcontainers.relay.v1.JoinResponse
+	29, // 59: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:output_type -> wasmcontainers.relay.v1.ListSecurityGroupsResponse
+	9,  // 60: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:output_type -> wasmcontainers.relay.v1.SecurityGroup
+	32, // 61: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:output_type -> wasmcontainers.relay.v1.DeleteSecurityGroupResponse
+	10, // 62: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:output_type -> wasmcontainers.relay.v1.SecurityGroupRule
+	35, // 63: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:output_type -> wasmcontainers.relay.v1.DeleteRuleResponse
+	11, // 64: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:output_type -> wasmcontainers.relay.v1.FlowEvent
+	38, // 65: wasmcontainers.relay.v1.PortService.ListPorts:output_type -> wasmcontainers.relay.v1.ListPortsResponse
+	8,  // 66: wasmcontainers.relay.v1.PortService.UpdatePort:output_type -> wasmcontainers.relay.v1.Port
+	11, // 67: wasmcontainers.relay.v1.FlowLogService.WatchFlows:output_type -> wasmcontainers.relay.v1.FlowEvent
+	45, // 68: wasmcontainers.relay.v1.FlowLogService.WatchFlowMap:output_type -> wasmcontainers.relay.v1.FlowMapUpdate
+	47, // 69: wasmcontainers.relay.v1.FlowMapService.FlowMapTicket:output_type -> wasmcontainers.relay.v1.FlowMapTicketResponse
+	49, // [49:70] is the sub-list for method output_type
+	28, // [28:49] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_wasmcontainers_relay_v1_relay_proto_init() }
@@ -3966,9 +4565,9 @@ func file_wasmcontainers_relay_v1_relay_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wasmcontainers_relay_v1_relay_proto_rawDesc), len(file_wasmcontainers_relay_v1_relay_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   52,
+			NumMessages:   59,
 			NumExtensions: 0,
-			NumServices:   5,
+			NumServices:   6,
 		},
 		GoTypes:           file_wasmcontainers_relay_v1_relay_proto_goTypes,
 		DependencyIndexes: file_wasmcontainers_relay_v1_relay_proto_depIdxs,

@@ -18,11 +18,12 @@ gRPC-Web and the Connect protocol on one handler) and the `wctr-relay`
 command. Documentation: <https://go-wasmcontainers.github.io/docs/latest/relay/>;
 design: <https://go-wasmcontainers.github.io/docs/latest/design/classroom-network/>.
 
-> **Status: M-relay-1 and M-relay-2.** The relay core, the data plane, the
-> firewall, the control API, the CLI, TLS (internal CA, files, ACME) and
-> OpenID Connect verification are written and tested natively. The browser
-> path inside the engine, the live flow map and high availability are later
-> milestones; see [Limitations](#limitations).
+> **Status: M-relay-1, M-relay-2 and M-relay-2b.** The relay core, the data
+> plane, the firewall, the control API, the CLI, TLS (internal CA, files,
+> ACME), OpenID Connect verification and the live flow map are written and
+> tested (natively, and the flow map in Chromium and Firefox). The browser
+> path inside the engine and high availability are later milestones; see
+> [Limitations](#limitations).
 
 ## Quick start (teacher)
 
@@ -52,6 +53,37 @@ ingress; egress to the teacher's subnet only): opening flows is the lab.
 ingress from the same group). The sequence above is what `TestAcceptance`
 (`internal/cli`) runs against a real `serve`.
 
+## The live flow map
+
+```console
+$ wctr-relay flowmap --class c-… --url https://relay.local:8443
+https://relay.local:8443/flowmap/#class=c-…&ticket=v1.…
+```
+
+Open the link (on the projector): every student is a box holding their
+containers, coloured by security group; every flow is a line whose width
+follows its throughput; a **refused flow flashes as a dashed red line**, and
+its row in the event log says which rule was missing. Click a container or a
+flow for its details (address, groups, the rules that allowed it, counters);
+the filter box dims everything else. The page is a Go WebAssembly
+application on [go-widgets](https://github.com/go-widgets/toolkit)'
+`GraphView`, served by the relay itself under a strict Content-Security-Policy
+(`script-src 'self' 'wasm-unsafe-eval'`, nothing from elsewhere), fed by the
+`FlowLogService.WatchFlowMap` server stream (Connect protocol): one
+aggregated update per tick (4 Hz), coalesced for a slow reader, capped at
+400 containers and 2 000 flows.
+
+The link's ticket (in the fragment, never sent to a server, removed from the
+address bar on load) allows watching that class's map and nothing else, for
+12 hours. A student can open their own view, with their session token: only
+the flows that touch their own containers.
+
+The page's WebAssembly is about 5 MB, so it is not committed: the binaries
+attached to each [release](https://github.com/go-wasmcontainers/relay/releases)
+carry it (built with `-tags flowmap`). From source:
+`go run ./internal/buildflowmap && go install -tags flowmap ./cmd/wctr-relay`.
+A plain `go install` serves the page, which then says the map is missing.
+
 ## Commands
 
 | Command | What |
@@ -67,6 +99,7 @@ ingress from the same group). The sequence above is what `TestAcceptance`
 | `explain SRC DST PROTO/PORT` | what the firewall would decide, and which rules |
 | `ca export`, `fingerprint`, `rotate` | the internal CA's root |
 | `teacher-session --out FILE` | a session for the teacher's own containers (subnet 0, label `teacher`) |
+| `flowmap --class C --url https://…` | the link to the class's live flow map, with a read-only 12-hour ticket |
 
 `serve` flags: `--listen` (`:8443`); `--tls internal|files|acme|off`;
 `--cert`/`--key` (files, reloaded on change); `--acme-domain`, `--acme-email`,
@@ -93,6 +126,8 @@ on the state directory's Unix socket (`0600`); the CLI uses it, or
 | `server` | the WebSocket data plane and the Connect handlers; public and admin handlers; OpenID Connect; pre-authentication limits |
 | `tlsca` | the internal, name-constrained CA |
 | `cmd/wctr-relay`, `internal/cli` | the cobra command line |
+| `web/flowmap` (own module) | the flow-map page: view model, scene (go-widgets `GraphView`, `LogView`), its WebAssembly main, browser tests |
+| `internal/buildflowmap` | builds the page's WebAssembly for `-tags flowmap` |
 
 The contract the engine implements is in [docs/NETWORKDRIVER.md](docs/NETWORKDRIVER.md).
 
@@ -128,7 +163,11 @@ The contract the engine implements is in [docs/NETWORKDRIVER.md](docs/NETWORKDRI
 The benchmarks are committed (`go test -run '^$' -bench . -cpu 1 ./relay`):
 one stream's throughput against a direct loopback TCP connection
 (`BenchmarkDirectTCP`), a 64-byte round trip, and 40 sessions echoing at once.
-**No numbers are published yet**: the measuring machine was loaded (1-minute
+The flow map adds `BenchmarkSceneFrame` (`web/flowmap`: one update applied
+and one 1920×1080 frame drawn, 40 students, 200 containers, 1 000 flows) and
+the browser test logs the time from navigation to the first flow on screen
+(184 ms in Chromium on the development machine). **No benchmark numbers are
+published yet**: the measuring machine was loaded (1-minute
 load above 12) when this release was cut, which makes ratios meaningless.
 They are an open item.
 
@@ -137,7 +176,8 @@ They are an open item.
 - The engine does not use the driver yet (its `NetworkDriver` is the engine's
   to write); the browser path, the playground served by the relay, join-flow
   detection and WebTransport are later milestones (M-relay-3 and -4).
-- No live flow map page yet (M-relay-2b), no ICMP (M-relay-5), no IPv6.
+- No ICMP (M-relay-5), no IPv6. The flow map has no pause/replay yet (the
+  relay keeps the last 1 000 events; the page shows the last 200).
 - One relay per class: high availability (Raft, epoch leases) is M-relay-HA.
 - servercert has no DNS-01 yet ([go-authn/servercert#16](https://github.com/go-authn/servercert/issues/16)),
   so a LAN-only relay with a public name needs a CA with pre-validated domains

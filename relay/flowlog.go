@@ -91,6 +91,7 @@ func (c *class) logFlow(f firewall.Flow, srcPort, dstPort string, verdict v1.Ver
 		e.DstSession = p.Session
 	}
 	c.log.add(e)
+	c.account(e, f)
 	for s := range c.subs {
 		if !s.wants(e) {
 			continue

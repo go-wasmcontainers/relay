@@ -52,7 +52,7 @@ func RootCmd() *cobra.Command {
 	pf.StringVar(&g.tokenFile, "token-file", "", "file holding the admin token for --server (0600)")
 	pf.StringVar(&g.caFile, "ca-file", "", "PEM root to trust for --server")
 	root.AddCommand(versionCmd(), initCmd(g), serveCmd(g), classCmd(g), sgCmd(g), ruleCmd(g), portCmd(g),
-		flowsCmd(g), explainCmd(g), caCmd(g), teacherCmd(g))
+		flowsCmd(g), explainCmd(g), caCmd(g), teacherCmd(g), flowMapCmd(g))
 	return root
 }
 
@@ -79,6 +79,7 @@ type client struct {
 	sg    relayv1connect.SecurityGroupServiceClient
 	port  relayv1connect.PortServiceClient
 	flows relayv1connect.FlowLogServiceClient
+	fmap  relayv1connect.FlowMapServiceClient
 }
 
 type bearerRT struct {
@@ -131,6 +132,7 @@ func (g *globals) client() (*client, error) {
 	return &client{
 		cls: relayv1connect.NewClassServiceClient(c), join: relayv1connect.NewJoinServiceClient(c),
 		sg: relayv1connect.NewSecurityGroupServiceClient(c), port: relayv1connect.NewPortServiceClient(c),
+		fmap:  relayv1connect.NewFlowMapServiceClient(c),
 		flows: relayv1connect.NewFlowLogServiceClient(c),
 	}, nil
 }

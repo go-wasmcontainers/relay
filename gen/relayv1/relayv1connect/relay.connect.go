@@ -32,6 +32,8 @@ const (
 	PortServiceName = "wasmcontainers.relay.v1.PortService"
 	// FlowLogServiceName is the fully-qualified name of the FlowLogService service.
 	FlowLogServiceName = "wasmcontainers.relay.v1.FlowLogService"
+	// FlowMapServiceName is the fully-qualified name of the FlowMapService service.
+	FlowMapServiceName = "wasmcontainers.relay.v1.FlowMapService"
 )
 
 // These constants are the procedure names of the RPCs defined in this package. They're exposed at
@@ -87,6 +89,12 @@ const (
 	PortServiceUpdatePortProcedure = "/wasmcontainers.relay.v1.PortService/UpdatePort"
 	// FlowLogServiceWatchFlowsProcedure is the procedure name of the FlowLogService's WatchFlows RPC.
 	FlowLogServiceWatchFlowsProcedure = "/wasmcontainers.relay.v1.FlowLogService/WatchFlows"
+	// FlowLogServiceWatchFlowMapProcedure is the procedure name of the FlowLogService's WatchFlowMap
+	// RPC.
+	FlowLogServiceWatchFlowMapProcedure = "/wasmcontainers.relay.v1.FlowLogService/WatchFlowMap"
+	// FlowMapServiceFlowMapTicketProcedure is the procedure name of the FlowMapService's FlowMapTicket
+	// RPC.
+	FlowMapServiceFlowMapTicketProcedure = "/wasmcontainers.relay.v1.FlowMapService/FlowMapTicket"
 )
 
 var (
@@ -860,11 +868,21 @@ var (
 			Procedure:  FlowLogServiceWatchFlowsProcedure,
 		}
 	})
+	flowLogServiceWatchFlowMapSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     relayv1.File_wasmcontainers_relay_v1_relay_proto.Services().ByName("FlowLogService").Methods().ByName("WatchFlowMap"),
+			Procedure:  FlowLogServiceWatchFlowMapProcedure,
+		}
+	})
 )
 
 // FlowLogServiceClient is a client for the wasmcontainers.relay.v1.FlowLogService service.
 type FlowLogServiceClient interface {
 	WatchFlows(context.Context, *relayv1.WatchFlowsRequest) (FlowLogServiceWatchFlowsClientStream, error)
+	// The flow map, for the teacher (admin, or a map ticket) or for one
+	// student (their session token: only their own flows).
+	WatchFlowMap(context.Context, *relayv1.WatchFlowMapRequest) (FlowLogServiceWatchFlowMapClientStream, error)
 }
 
 // NewFlowLogServiceClient constructs a client for the wasmcontainers.relay.v1.FlowLogService
@@ -894,9 +912,33 @@ func (s FlowLogServiceWatchFlowsClientStream) Close() error {
 	return s.stream.Close()
 }
 
+// FlowLogServiceWatchFlowMapClientStream is the client stream for the FlowLogService's WatchFlowMap
+// RPC.
+type FlowLogServiceWatchFlowMapClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s FlowLogServiceWatchFlowMapClientStream) Receive() (*relayv1.FlowMapUpdate, error) {
+	var res relayv1.FlowMapUpdate
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s FlowLogServiceWatchFlowMapClientStream) Close() error {
+	return s.stream.Close()
+}
+
 // FlowLogServiceHandler is an implementation of the wasmcontainers.relay.v1.FlowLogService service.
 type FlowLogServiceHandler interface {
 	WatchFlows(context.Context, *relayv1.WatchFlowsRequest, FlowLogServiceWatchFlowsServerStream) error
+	// The flow map, for the teacher (admin, or a map ticket) or for one
+	// student (their session token: only their own flows).
+	WatchFlowMap(context.Context, *relayv1.WatchFlowMapRequest, FlowLogServiceWatchFlowMapServerStream) error
 }
 
 // RegisterFlowLogServiceHandler registers svc as the wasmcontainers.relay.v1.FlowLogService
@@ -905,6 +947,7 @@ func RegisterFlowLogServiceHandler(server *connect.Server, svc FlowLogServiceHan
 	adapter := flowLogServiceHandler{svc: svc}
 	server.Register(
 		connect.Method{Spec: flowLogServiceWatchFlowsSpec(), Handler: adapter.watchFlows},
+		connect.Method{Spec: flowLogServiceWatchFlowMapSpec(), Handler: adapter.watchFlowMap},
 	)
 }
 
@@ -924,11 +967,31 @@ func (s FlowLogServiceWatchFlowsServerStream) Send(res *relayv1.FlowEvent) error
 	return s.stream.Send(res)
 }
 
+// FlowLogServiceWatchFlowMapServerStream is the server stream for the FlowLogService's WatchFlowMap
+// RPC.
+type FlowLogServiceWatchFlowMapServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s FlowLogServiceWatchFlowMapServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s FlowLogServiceWatchFlowMapServerStream) Send(res *relayv1.FlowMapUpdate) error {
+	return s.stream.Send(res)
+}
+
 // UnimplementedFlowLogServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedFlowLogServiceHandler struct{}
 
 func (UnimplementedFlowLogServiceHandler) WatchFlows(context.Context, *relayv1.WatchFlowsRequest, FlowLogServiceWatchFlowsServerStream) error {
 	return connect.NewError(connect.CodeUnimplemented, "wasmcontainers.relay.v1.FlowLogService.WatchFlows is not implemented")
+}
+
+func (UnimplementedFlowLogServiceHandler) WatchFlowMap(context.Context, *relayv1.WatchFlowMapRequest, FlowLogServiceWatchFlowMapServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "wasmcontainers.relay.v1.FlowLogService.WatchFlowMap is not implemented")
 }
 
 type flowLogServiceClient struct {
@@ -943,6 +1006,14 @@ func (c *flowLogServiceClient) WatchFlows(ctx context.Context, req *relayv1.Watc
 	return FlowLogServiceWatchFlowsClientStream{stream: stream}, nil
 }
 
+func (c *flowLogServiceClient) WatchFlowMap(ctx context.Context, req *relayv1.WatchFlowMapRequest) (FlowLogServiceWatchFlowMapClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, flowLogServiceWatchFlowMapSpec(), req)
+	if err != nil {
+		return FlowLogServiceWatchFlowMapClientStream{}, err
+	}
+	return FlowLogServiceWatchFlowMapClientStream{stream: stream}, nil
+}
+
 type flowLogServiceHandler struct{ svc FlowLogServiceHandler }
 
 func (h flowLogServiceHandler) watchFlows(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
@@ -951,4 +1022,80 @@ func (h flowLogServiceHandler) watchFlows(ctx context.Context, _ connect.Spec, s
 		return err
 	}
 	return h.svc.WatchFlows(ctx, &req, FlowLogServiceWatchFlowsServerStream{stream: stream})
+}
+
+func (h flowLogServiceHandler) watchFlowMap(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req relayv1.WatchFlowMapRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchFlowMap(ctx, &req, FlowLogServiceWatchFlowMapServerStream{stream: stream})
+}
+
+var (
+	flowMapServiceFlowMapTicketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     relayv1.File_wasmcontainers_relay_v1_relay_proto.Services().ByName("FlowMapService").Methods().ByName("FlowMapTicket"),
+			Procedure:  FlowMapServiceFlowMapTicketProcedure,
+		}
+	})
+)
+
+// FlowMapServiceClient is a client for the wasmcontainers.relay.v1.FlowMapService service.
+type FlowMapServiceClient interface {
+	FlowMapTicket(context.Context, *relayv1.FlowMapTicketRequest) (*relayv1.FlowMapTicketResponse, error)
+}
+
+// NewFlowMapServiceClient constructs a client for the wasmcontainers.relay.v1.FlowMapService
+// service. Multiple service clients may share a single connect.Client.
+func NewFlowMapServiceClient(client *connect.Client) FlowMapServiceClient {
+	return &flowMapServiceClient{client: client}
+}
+
+// FlowMapServiceHandler is an implementation of the wasmcontainers.relay.v1.FlowMapService service.
+type FlowMapServiceHandler interface {
+	FlowMapTicket(context.Context, *relayv1.FlowMapTicketRequest) (*relayv1.FlowMapTicketResponse, error)
+}
+
+// RegisterFlowMapServiceHandler registers svc as the wasmcontainers.relay.v1.FlowMapService
+// implementation on server.
+func RegisterFlowMapServiceHandler(server *connect.Server, svc FlowMapServiceHandler) {
+	adapter := flowMapServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: flowMapServiceFlowMapTicketSpec(), Handler: adapter.flowMapTicket},
+	)
+}
+
+// UnimplementedFlowMapServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedFlowMapServiceHandler struct{}
+
+func (UnimplementedFlowMapServiceHandler) FlowMapTicket(context.Context, *relayv1.FlowMapTicketRequest) (*relayv1.FlowMapTicketResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "wasmcontainers.relay.v1.FlowMapService.FlowMapTicket is not implemented")
+}
+
+type flowMapServiceClient struct {
+	client *connect.Client
+}
+
+func (c *flowMapServiceClient) FlowMapTicket(ctx context.Context, req *relayv1.FlowMapTicketRequest) (*relayv1.FlowMapTicketResponse, error) {
+	var res relayv1.FlowMapTicketResponse
+	if err := c.client.CallUnary(ctx, flowMapServiceFlowMapTicketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type flowMapServiceHandler struct{ svc FlowMapServiceHandler }
+
+func (h flowMapServiceHandler) flowMapTicket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req relayv1.FlowMapTicketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.FlowMapTicket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

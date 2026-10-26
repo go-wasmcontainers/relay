@@ -178,6 +178,12 @@ func TestAcceptance(t *testing.T) {
 	if out := mustRun(t, "ca", "export", st); !strings.Contains(out, "BEGIN CERTIFICATE") {
 		t.Fatal(out)
 	}
+	if out := mustRun(t, "flowmap", st, cls, "--url", base); !strings.Contains(out, base+"/flowmap/#class="+id[1]+"&ticket=v1.") {
+		t.Fatalf("flowmap: %q", out)
+	}
+	if _, err := run(t, context.Background(), "flowmap", st, cls, "--url", "http://x"); err == nil {
+		t.Fatal("flowmap with a cleartext URL")
+	}
 	tokFile := filepath.Join(shortDir(t), "teacher.token")
 	if out := mustRun(t, "teacher-session", st, cls, "--out", tokFile); !strings.Contains(out, "teacher") {
 		t.Fatal(out)
