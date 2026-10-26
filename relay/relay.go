@@ -124,7 +124,9 @@ const (
 
 func (e *Error) Error() string { return e.Msg }
 
-func errf(k Kind, format string, a ...any) error { return &Error{Kind: k, Msg: fmt.Sprintf(format, a...)} }
+func errf(k Kind, format string, a ...any) error {
+	return &Error{Kind: k, Msg: fmt.Sprintf(format, a...)}
+}
 
 // ErrKind returns the kind of err, or 0.
 func ErrKind(err error) Kind {

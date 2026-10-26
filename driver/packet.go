@@ -239,7 +239,9 @@ func (u *udpConn) Close() error {
 	return nil
 }
 
-func (u *udpConn) LocalAddr() net.Addr                { return net.UDPAddrFromAddrPort(netip.AddrPortFrom(u.e.addr, 0)) }
+func (u *udpConn) LocalAddr() net.Addr {
+	return net.UDPAddrFromAddrPort(netip.AddrPortFrom(u.e.addr, 0))
+}
 func (u *udpConn) RemoteAddr() net.Addr               { return net.UDPAddrFromAddrPort(u.remote) }
 func (u *udpConn) SetDeadline(t time.Time) error      { u.q.setReadDeadline(t); return nil }
 func (u *udpConn) SetReadDeadline(t time.Time) error  { u.q.setReadDeadline(t); return nil }

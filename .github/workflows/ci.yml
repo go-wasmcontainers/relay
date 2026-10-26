@@ -1,0 +1,139 @@
+name: ci
+on: { push: { branches: [main] }, pull_request: {} }
+permissions: { contents: read }
+jobs:
+  # A workflow that fails to parse reports no checks at all, which reads
+  # exactly like checks that have not started. actionlint is the first lane.
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: go version
+      - name: gofmt
+        shell: bash
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "::error::not gofmt-ed:"; echo "$out"; exit 1; fi
+      - run: go vet ./...
+      - run: CGO_ENABLED=0 go build ./...
+      - name: go test -race, with coverage
+        shell: bash
+        run: |
+          CGO_ENABLED=1 go test -race -count=1 -coverpkg=./... -coverprofile=cov.out ./...
+          go tool cover -func=cov.out > cov.txt
+          tail -1 cov.txt
+          echo "### Coverage (${{ matrix.os }}): $(tail -1 cov.txt | tr -s '\t ' ' ')" >> "$GITHUB_STEP_SUMMARY"
+
+  # Every decoder of untrusted input is fuzzed on every change: frames from
+  # browsers, session tokens, join codes, display names, CLI rule specs, and
+  # the relay itself fed arbitrary frames.
+  fuzz:
+    name: fuzz smoke ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: FuzzDecode, pkg: ./frame }
+          - { target: FuzzParseToken, pkg: ./auth }
+          - { target: FuzzNormalizeJoinCode, pkg: ./auth }
+          - { target: FuzzLabel, pkg: ./auth }
+          - { target: FuzzParsePortRange, pkg: ./firewall }
+          - { target: FuzzParseProtocol, pkg: ./firewall }
+          - { target: FuzzServe, pkg: ./relay }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: go version
+      - run: go test -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime 45s ${{ matrix.pkg }}
+
+  vulns:
+    name: govulncheck, judged by vulngate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: go version
+      # No pipefail on purpose: govulncheck's exit status does not say
+      # whether a finding is reachable; vulngate judges the JSON, and an
+      # empty scan is refused outright.
+      - name: govulncheck, judged by vulngate
+        run: |
+          set -eu
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/go-fleettools/fleettools/cmd/vulngate@v0.20.1
+          BIN="$(go env GOPATH)/bin"
+          "$BIN/govulncheck" -format json ./... > /tmp/vuln.json || true
+          test -s /tmp/vuln.json || { echo "::error::govulncheck wrote nothing at all"; exit 1; }
+          "$BIN/vulngate" -go "$(go env GOVERSION)" /tmp/vuln.json
+
+  # gen/relayv1 must be exactly what the pinned generators make of the proto.
+  proto:
+    name: gen/relayv1 is generated from relay.proto
+    runs-on: ubuntu-latest
+    env: { PROTOC_VERSION: "36.2" }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/protoc.zip \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          sudo unzip -q -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*'
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+          go install connectrpc.com/connect/v2/cmd/protoc-gen-connect-go@v2.0.2
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          protoc -I proto --go_out=. --go_opt=module=github.com/go-wasmcontainers/relay \
+            --connect-go_out=. --connect-go_opt=module=github.com/go-wasmcontainers/relay \
+            proto/wasmcontainers/relay/v1/relay.proto
+          untracked=$(git ls-files --others --exclude-standard -- gen)
+          git diff --exit-code -- gen && [ -z "$untracked" ] || {
+            echo "::error::gen/relayv1 is not what protoc generates from relay.proto"; echo "$untracked"; exit 1; }
+
+  # The driver runs inside the engine, natively and in a browser (js/wasm).
+  wasm:
+    name: driver builds for js/wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: GOOS=js GOARCH=wasm CGO_ENABLED=0 go build ./driver ./frame ./firewall ./auth ./gen/...
+
+  cross:
+    name: cross ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: linux, goarch: '386' }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version: '1.27.3' }
+      - run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build ./...

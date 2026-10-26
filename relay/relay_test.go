@@ -23,14 +23,14 @@ import (
 )
 
 type env struct {
-	t     *testing.T
+	t     testing.TB
 	r     *relay.Relay
 	class *v1.Class
 	mu    sync.Mutex
 	audit []string
 }
 
-func newEnv(t *testing.T, tmpl v1.Template, lim relay.Limits) *env {
+func newEnv(t testing.TB, tmpl v1.Template, lim relay.Limits) *env {
 	t.Helper()
 	k, err := auth.NewKeys()
 	if err != nil {

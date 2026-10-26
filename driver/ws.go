@@ -18,10 +18,7 @@ import (
 // checked before the upgrade and never appears in a URL. hc may be nil (in a
 // browser, js/wasm, the browser's WebSocket is used and hc is ignored).
 func DialWebSocket(ctx context.Context, url, token string, hc *http.Client) (*Session, error) {
-	c, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
-		HTTPClient:   hc,
-		Subprotocols: []string{frame.Subprotocol, frame.BearerPrefix + token},
-	})
+	c, _, err := websocket.Dial(ctx, url, dialOptions(hc, []string{frame.Subprotocol, frame.BearerPrefix + token}))
 	if err != nil {
 		return nil, err
 	}

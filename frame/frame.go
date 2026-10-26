@@ -5,11 +5,11 @@
 // One WebSocket per browser carries binary messages; each message is exactly
 // one frame:
 //
-//	 0      1      2              6              10
-//	 +------+------+--------------+--------------+------------------+
-//	 | type | flags| stream id    | length       | payload ...      |
-//	 | u8   | u8   | u32 BE       | u32 BE       | length bytes     |
-//	 +------+------+--------------+--------------+------------------+
+//	0      1      2              6              10
+//	+------+------+--------------+--------------+------------------+
+//	| type | flags| stream id    | length       | payload ...      |
+//	| u8   | u8   | u32 BE       | u32 BE       | length bytes     |
+//	+------+------+--------------+--------------+------------------+
 //
 // length must equal the number of payload bytes that follow, and be at most
 // MaxPayload. Control frames carry a protobuf message (package relayv1);

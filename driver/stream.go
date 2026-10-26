@@ -24,22 +24,22 @@ import (
 // announced before this side returns credit, which it does as the
 // application reads.
 type stream struct {
-	s       *Session
-	id      uint32
-	local   netip.AddrPort
-	remote  netip.AddrPort
-	window  int64
+	s        *Session
+	id       uint32
+	local    netip.AddrPort
+	remote   netip.AddrPort
+	window   int64
 	accepted chan error // the CONNECT's answer, for a dialled stream
 
-	mu       sync.Mutex
-	notify   chan struct{} // closed and replaced on every state change
-	buf      [][]byte
-	unacked  int64 // bytes read by the application, not yet credited back
-	credit   int64 // bytes we may still send
-	peerEOF  bool
+	mu          sync.Mutex
+	notify      chan struct{} // closed and replaced on every state change
+	buf         [][]byte
+	unacked     int64 // bytes read by the application, not yet credited back
+	credit      int64 // bytes we may still send
+	peerEOF     bool
 	closedLocal bool
-	err      error
-	rdl, wdl time.Time
+	err         error
+	rdl, wdl    time.Time
 }
 
 func newStream(s *Session, id uint32) *stream {

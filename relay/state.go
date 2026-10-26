@@ -22,22 +22,22 @@ type State struct {
 }
 
 type sClass struct {
-	ID          string              `json:"id"`
-	Name        string              `json:"name"`
-	JoinCode    string              `json:"join_code"`
-	CIDR        string              `json:"cidr"`
-	SessionBits int                 `json:"session_bits"`
-	DNSDomain   string              `json:"dns_domain"`
-	Template    int                 `json:"template"`
-	Allowed     []string            `json:"allowed,omitempty"`
-	RequireID   bool                `json:"require_identity,omitempty"`
-	Created     int64               `json:"created"`
-	Epoch       uint64              `json:"epoch"`
-	DefaultSG   string              `json:"default_sg"`
-	Groups      map[string]*sGroup  `json:"groups"`
-	Sessions    map[string]*sSess   `json:"sessions"`
-	Ports       map[string]*sPort   `json:"ports"` // by port id
-	NextID      uint64              `json:"next_id"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	JoinCode    string             `json:"join_code"`
+	CIDR        string             `json:"cidr"`
+	SessionBits int                `json:"session_bits"`
+	DNSDomain   string             `json:"dns_domain"`
+	Template    int                `json:"template"`
+	Allowed     []string           `json:"allowed,omitempty"`
+	RequireID   bool               `json:"require_identity,omitempty"`
+	Created     int64              `json:"created"`
+	Epoch       uint64             `json:"epoch"`
+	DefaultSG   string             `json:"default_sg"`
+	Groups      map[string]*sGroup `json:"groups"`
+	Sessions    map[string]*sSess  `json:"sessions"`
+	Ports       map[string]*sPort  `json:"ports"` // by port id
+	NextID      uint64             `json:"next_id"`
 }
 
 type sGroup struct {
