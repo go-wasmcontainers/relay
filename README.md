@@ -78,7 +78,7 @@ address bar on load) allows watching that class's map and nothing else, for
 12 hours. A student can open their own view, with their session token: only
 the flows that touch their own containers.
 
-The page's WebAssembly is about 5 MB, so it is not committed: the binaries
+The page's WebAssembly is about 20 MB (4.9 MB gzipped, as embedded), so it is not committed: the binaries
 attached to each [release](https://github.com/go-wasmcontainers/relay/releases)
 carry it (built with `-tags flowmap`). From source:
 `go run ./internal/buildflowmap && go install -tags flowmap ./cmd/wctr-relay`.
