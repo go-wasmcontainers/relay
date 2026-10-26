@@ -111,8 +111,10 @@ allowed to open the data channel, default the GitHub Pages playground);
 `--oidc-type`, `--teacher-group` (OpenID Connect through
 [go-authn/oidc](https://github.com/go-authn/oidc)); `--admin-listen` (admin
 API on TCP with TLS); `--session-ttl`; `--audit-retention`. The admin API is
-on the state directory's Unix socket (`0600`); the CLI uses it, or
-`--server https://… --token-file FILE`.
+on the state directory's Unix socket (`0600`), or the path given with
+`--admin-socket` (to `serve` and to the CLI alike; a Unix socket path holds
+at most 103 bytes on macOS and 107 on Linux, and a longer one is refused with
+that reason); the CLI uses it, or `--server https://… --token-file FILE`.
 
 ## Packages
 
