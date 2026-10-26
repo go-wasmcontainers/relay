@@ -102,13 +102,15 @@ jobs:
           sudo unzip -q -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*'
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
           go install connectrpc.com/connect/v2/cmd/protoc-gen-connect-go@v2.0.2
-          export PATH="$(go env GOPATH)/bin:$PATH"
+          gobin="$(go env GOPATH)/bin"
+          export PATH="$gobin:$PATH"
           protoc -I proto --go_out=. --go_opt=module=github.com/go-wasmcontainers/relay \
             --connect-go_out=. --connect-go_opt=module=github.com/go-wasmcontainers/relay \
             proto/wasmcontainers/relay/v1/relay.proto
           untracked=$(git ls-files --others --exclude-standard -- gen)
-          git diff --exit-code -- gen && [ -z "$untracked" ] || {
-            echo "::error::gen/relayv1 is not what protoc generates from relay.proto"; echo "$untracked"; exit 1; }
+          if ! git diff --exit-code -- gen || [ -n "$untracked" ]; then
+            echo "::error::gen/relayv1 is not what protoc generates from relay.proto"; echo "$untracked"; exit 1
+          fi
 
   # The driver runs inside the engine, natively and in a browser (js/wasm).
   wasm:
