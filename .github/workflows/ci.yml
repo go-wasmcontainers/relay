@@ -86,7 +86,7 @@ jobs:
           test -s /tmp/vuln.json || { echo "::error::govulncheck wrote nothing at all"; exit 1; }
           "$BIN/vulngate" -go "$(go env GOVERSION)" /tmp/vuln.json
           # The flow-map page's module (go-widgets and its dependencies).
-          (cd web/flowmap && "$BIN/govulncheck" -format json ./... > /tmp/vuln-flowmap.json || true)
+          "$BIN/govulncheck" -C web/flowmap -format json ./... > /tmp/vuln-flowmap.json || true
           test -s /tmp/vuln-flowmap.json || { echo "::error::govulncheck wrote nothing for web/flowmap"; exit 1; }
           "$BIN/vulngate" -go "$(go env GOVERSION)" /tmp/vuln-flowmap.json
 
