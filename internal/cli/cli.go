@@ -33,6 +33,7 @@ type globals struct {
 	server    string // admin URL; empty: the state directory's socket
 	tokenFile string
 	caFile    string
+	adminSock string // --admin-socket; empty: admin.sock in the state directory
 }
 
 // RootCmd builds the command tree.
@@ -51,6 +52,7 @@ func RootCmd() *cobra.Command {
 	pf.StringVar(&g.server, "server", "", "admin API URL of a remote relay (default: the local admin socket)")
 	pf.StringVar(&g.tokenFile, "token-file", "", "file holding the admin token for --server (0600)")
 	pf.StringVar(&g.caFile, "ca-file", "", "PEM root to trust for --server")
+	pf.StringVar(&g.adminSock, "admin-socket", "", "admin socket path (default: admin.sock in the state directory; at most 103 bytes on macOS, 107 on Linux)")
 	root.AddCommand(versionCmd(), initCmd(g), serveCmd(g), classCmd(g), sgCmd(g), ruleCmd(g), portCmd(g),
 		flowsCmd(g), explainCmd(g), caCmd(g), teacherCmd(g), flowMapCmd(g))
 	return root
@@ -97,11 +99,10 @@ func (g *globals) client() (*client, error) {
 	var hc *http.Client
 	base := g.server
 	if base == "" {
-		d, err := g.dir()
+		sock, err := g.adminSocket()
 		if err != nil {
 			return nil, err
 		}
-		sock := d.Socket()
 		hc = &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var dl net.Dialer
 			return dl.DialContext(ctx, "unix", sock)

@@ -216,15 +216,13 @@ func serve(cmd *cobra.Command, g *globals, f *serveFlags) error {
 	}
 	server.Version = Version
 
-	// Admin socket: in the 0700 state directory, made 0600.
-	sock := d.Socket()
-	os.Remove(sock)
-	ul, err := net.Listen("unix", sock)
+	// Admin socket: 0600, bound without a window (see listenAdmin).
+	sock, err := g.adminSocket()
 	if err != nil {
 		return err
 	}
-	if err := os.Chmod(sock, 0o600); err != nil {
-		ul.Close()
+	ul, err := listenAdmin(sock)
+	if err != nil {
 		return err
 	}
 	defer os.Remove(sock)

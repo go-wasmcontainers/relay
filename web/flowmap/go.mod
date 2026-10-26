@@ -6,7 +6,7 @@ require (
 	connectrpc.com/connect/v2 v2.0.2
 	github.com/go-wasmcontainers/relay v0.1.0
 	github.com/go-widgets/painter v0.16.0
-	github.com/go-widgets/toolkit v0.343.0
+	github.com/go-widgets/toolkit v0.343.1
 	github.com/go-widgets/webcanvas v0.4.1
 	github.com/playwright-community/playwright-go v0.5700.1
 )
