@@ -30,8 +30,9 @@ type class struct {
 	track     map[flowKey]time.Time // UDP flows allowed, by forward flow
 	ephemeral map[string]uint16     // port id -> next ephemeral port
 
-	log  *flowLog
-	subs map[*subscriber]struct{}
+	log      *flowLog
+	subs     map[*subscriber]struct{}
+	denySeen map[flowKey]time.Time // last deny logged per UDP flow
 }
 
 type lkey struct {
@@ -43,6 +44,7 @@ type lkey struct {
 type listener struct {
 	portID string
 	conn   *conn
+	auto   bool // the implicit UDP port of a sender that never bound one
 }
 
 type flowKey struct {
@@ -57,7 +59,8 @@ func newClass(r *Relay, sc *sClass) (*class, error) {
 	}
 	c := &class{r: r, s: sc, net: pfx, conns: map[string]*conn{}, listeners: map[lkey]*listener{},
 		links: map[*link]struct{}{}, track: map[flowKey]time.Time{}, ephemeral: map[string]uint16{},
-		byAddr: map[netip.Addr]string{}, log: newFlowLog(1000), subs: map[*subscriber]struct{}{}}
+		byAddr: map[netip.Addr]string{}, log: newFlowLog(1000), subs: map[*subscriber]struct{}{},
+		denySeen: map[flowKey]time.Time{}}
 	if sc.Groups == nil {
 		sc.Groups = map[string]*sGroup{}
 	}
