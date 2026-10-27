@@ -4,6 +4,7 @@ go 1.27.3
 
 require (
 	connectrpc.com/connect/v2 v2.0.2
+	connectrpc.com/cors v0.1.0
 	github.com/coder/websocket v1.8.15
 	github.com/go-authn/oidc v0.4.3
 	github.com/go-authn/servercert v0.5.2

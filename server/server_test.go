@@ -241,18 +241,29 @@ func TestUpgradeRefusedWithoutToken(t *testing.T) {
 }
 
 func TestOriginChecked(t *testing.T) {
-	g := newRig(t, server.Config{OriginPatterns: []string{"go-wasmcontainers.github.io"}})
+	g := newRig(t, server.Config{AllowedOrigins: []string{"https://go-wasmcontainers.github.io"}})
 	ctx := tctx(t)
 	cls, _ := classClient(g.admin, g.adm.URL).CreateClass(ctx, &v1.CreateClassRequest{Name: "o"})
 	j, _ := joinClient(g.public, g.pub.URL).Join(ctx, &v1.JoinRequest{JoinCode: cls.JoinCode, DisplayName: "A"})
-	evil := withHeader(g.public, "Origin", "https://evil.example")
-	if _, err := driver.DialWebSocket(ctx, wsURL(g.pub), j.SessionToken, evil); err == nil {
-		t.Fatal("a foreign origin opened the data channel")
+	for _, o := range []string{"https://evil.example", "http://go-wasmcontainers.github.io",
+		"https://go-wasmcontainers.github.io.evil.example", "null"} {
+		evil := withHeader(g.public, "Origin", o)
+		if _, err := driver.DialWebSocket(ctx, wsURL(g.pub), j.SessionToken, evil); err == nil {
+			t.Fatalf("origin %s opened the data channel", o)
+		}
 	}
-	good := withHeader(g.public, "Origin", "https://go-wasmcontainers.github.io")
-	s, err := driver.DialWebSocket(ctx, wsURL(g.pub), j.SessionToken, good)
+	for _, o := range []string{"https://go-wasmcontainers.github.io", "https://" + strings.TrimPrefix(g.pub.URL, "https://")} {
+		good := withHeader(g.public, "Origin", o)
+		s, err := driver.DialWebSocket(ctx, wsURL(g.pub), j.SessionToken, good)
+		if err != nil {
+			t.Fatalf("allowed origin %s: %v", o, err)
+		}
+		s.Close()
+	}
+	// No Origin at all: a client without a browser.
+	s, err := driver.DialWebSocket(ctx, wsURL(g.pub), j.SessionToken, g.public)
 	if err != nil {
-		t.Fatalf("allowed origin: %v", err)
+		t.Fatalf("no origin: %v", err)
 	}
 	s.Close()
 }
