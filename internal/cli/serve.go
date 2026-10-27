@@ -76,7 +76,8 @@ func serveCmd(g *globals) *cobra.Command {
 	fl.StringVar(&f.eabKID, "eab-kid", "", "External Account Binding key id")
 	fl.StringVar(&f.eabHMACFile, "eab-hmac-file", "", "file holding the EAB HMAC key (0600)")
 	fl.StringVar(&f.acmeHTTP, "acme-http", "", "also answer http-01 on this address (e.g. :80)")
-	fl.StringSliceVar(&f.origins, "origin", []string{"go-wasmcontainers.github.io"}, "other origins allowed to open the data channel")
+	fl.StringArrayVar(&f.origins, "cors-origin", nil,
+		"browser origin allowed besides the relay's own, e.g. https://go-wasmcontainers.github.io (repeatable; never *): CORS on Join, RefreshSession and the flow views, and the data WebSocket's Origin check")
 	fl.StringSliceVar(&f.hosts, "host", nil, "Host names (or addresses) served; others are refused (DNS rebinding)")
 	fl.StringVar(&f.oidcIssuer, "oidc-issuer", "", "OpenID Connect issuer whose tokens identify people")
 	fl.StringVar(&f.oidcAudience, "oidc-audience", "", "audience the tokens must name (this relay's client id)")
@@ -210,7 +211,7 @@ func serve(cmd *cobra.Command, g *globals, f *serveFlags) error {
 		hosts = append(hosts, strings.ToLower(h))
 	}
 	srv, err := server.New(server.Config{Relay: r, AdminToken: adminToken, OIDC: verifier, TeacherGroup: f.teacherGroup,
-		OriginPatterns: f.origins, AllowedHosts: hosts, TLSMode: f.tlsMode, Logf: logf})
+		AllowedOrigins: f.origins, AllowedHosts: hosts, TLSMode: f.tlsMode, Logf: logf})
 	if err != nil {
 		return err
 	}

@@ -105,8 +105,13 @@ A plain `go install` serves the page, which then says the map is missing.
 `--cert`/`--key` (files, reloaded on change); `--acme-domain`, `--acme-email`,
 `--acme-directory`, `--eab-kid`, `--eab-hmac-file`, `--acme-http` (ACME
 through [go-authn/servercert](https://github.com/go-authn/servercert)); `off`
-only on loopback, behind a proxy such as Caddy; `--origin` (other origins
-allowed to open the data channel, default the GitHub Pages playground);
+only on loopback, behind a proxy such as Caddy; `--cors-origin
+https://go-wasmcontainers.github.io` (repeatable; a browser origin allowed
+besides the relay's own: CORS on Join, RefreshSession, WatchFlowMap,
+WatchFlows and ListPorts, and the Origin check of the data WebSocket against
+cross-site hijacking; never `*`, no credentials mode, preflights cached 2
+hours; default none, so a page served from elsewhere, such as the GitHub
+Pages playground, must be listed; the admin listener has no CORS);
 `--host` (Host names served); `--oidc-issuer`, `--oidc-audience`,
 `--oidc-type`, `--teacher-group` (OpenID Connect through
 [go-authn/oidc](https://github.com/go-authn/oidc)); `--admin-listen` (admin

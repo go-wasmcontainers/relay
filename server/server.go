@@ -45,10 +45,12 @@ type Config struct {
 	// TeacherGroup.
 	OIDC         *oidc.Verifier
 	TeacherGroup string
-	// OriginPatterns are the origins allowed to open the WebSocket besides
-	// the relay's own (coder/websocket's patterns, e.g.
-	// "go-wasmcontainers.github.io").
-	OriginPatterns []string
+	// AllowedOrigins are the browser origins (scheme://host[:port], e.g.
+	// "https://go-wasmcontainers.github.io") allowed besides the relay's own:
+	// CORS on the public RPCs a page needs (Join, RefreshSession, the flow
+	// views) and the Origin check of the data WebSocket. Never "*"; empty
+	// means same-origin only.
+	AllowedOrigins []string
 	// AllowedHosts, when set, are the only Host headers served (DNS
 	// rebinding); ports are ignored.
 	AllowedHosts []string
@@ -64,9 +66,10 @@ type Config struct {
 
 // Server serves one relay.
 type Server struct {
-	cfg  Config
-	ipl  *ipLimiter
-	hand chan struct{}
+	cfg     Config
+	ipl     *ipLimiter
+	hand    chan struct{}
+	origins []string // normalised AllowedOrigins
 }
 
 // New checks cfg and returns a Server.
@@ -83,8 +86,16 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Logf == nil {
 		cfg.Logf = func(string, ...any) {}
 	}
+	origins := make([]string, 0, len(cfg.AllowedOrigins))
+	for _, o := range cfg.AllowedOrigins {
+		n, err := NormalizeOrigin(o)
+		if err != nil {
+			return nil, err
+		}
+		origins = append(origins, n)
+	}
 	return &Server{cfg: cfg, ipl: newIPLimiter(float64(cfg.PreAuthPerMinute)/60, float64(cfg.PreAuthPerMinute)),
-		hand: make(chan struct{}, cfg.MaxHandshakes)}, nil
+		hand: make(chan struct{}, cfg.MaxHandshakes), origins: origins}, nil
 }
 
 // ---------------------------------------------------------------- principals
@@ -153,7 +164,7 @@ func (s *Server) Public() http.Handler {
 	relayv1connect.RegisterFlowLogServiceHandler(cs, svc)
 	relayv1connect.RegisterSecurityGroupServiceHandler(cs, svc)
 	connecthttp.Mount(mux, cs, connecthttp.WithReadMaxBytes(1<<20))
-	return s.guard(mux, false)
+	return s.guard(s.cors(mux), false)
 }
 
 // Admin is the handler for the teacher: Unix socket, loopback, or a
@@ -279,6 +290,13 @@ func clientIP(r *http.Request) string {
 }
 
 func (s *Server) data(w http.ResponseWriter, r *http.Request) {
+	// Cross-site WebSocket hijacking: a browser always sends Origin on an
+	// upgrade; only the allowlist and the relay's own origin may open it.
+	// Clients without a browser send none.
+	if o := r.Header.Get("Origin"); o != "" && !s.originAllowed(r, o) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
 	if !s.ipl.allow(clientIP(r)) {
 		http.Error(w, "slow down", http.StatusTooManyRequests)
 		return
@@ -303,7 +321,9 @@ func (s *Server) data(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	defer release()
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{frame.Subprotocol}, OriginPatterns: s.cfg.OriginPatterns})
+	// The Origin was checked above against exact origins (coder/websocket's
+	// patterns are path.Match globs, which an IPv6 "[::1]" host breaks).
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{frame.Subprotocol}, InsecureSkipVerify: true})
 	if err != nil {
 		return
 	}
