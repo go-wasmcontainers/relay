@@ -160,7 +160,7 @@ jobs:
           go run github.com/go-wasmcontainers/playground/cmd/site@v0.1.0 playwright-driver --dir "$RUNNER_TEMP/pwdriver"
           cd web/flowmap
           PLAYWRIGHT_DRIVER_PATH="$RUNNER_TEMP/pwdriver" PLAYWRIGHT_NODEJS_PATH="$(command -v node)" \
-            go run github.com/playwright-community/playwright-go/cmd/playwright install --with-deps chromium firefox
+            go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps chromium firefox
       - name: browsers (Chromium, Firefox)
         working-directory: web/flowmap
         run: go test -tags 'e2e flowmap' -count=1 -v -timeout 10m ./e2e
