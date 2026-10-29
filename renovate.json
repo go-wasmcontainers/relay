@@ -9,6 +9,14 @@
       "matchFileNames": ["web/flowmap/go.mod"],
       "matchDepNames": ["github.com/go-wasmcontainers/relay"],
       "enabled": false
+    },
+    {
+      "description": [
+        "Hold Node at 22 for the flow map job: with node 26 the 'Playwright driver and browsers' step of ci.yml never finishes (relay#11: job in_progress for 4h51m, cancelled; a rerun hung again after 22 minutes, while the same job on main with node 22 takes under 15 minutes). Lift when playwright-go's driver install is shown to run on a newer Node."
+      ],
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["node"],
+      "allowedVersions": "<23"
     }
   ]
 }
