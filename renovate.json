@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>go-wasmcontainers/.github"],
+  "packageRules": [
+    {
+      "description": [
+        "web/flowmap/go.mod requires this very repository and pins it with `replace github.com/go-wasmcontainers/relay => ../..`, so the version in the require line is never resolved. Renovate bumping it (relay#5: v0.1.0 -> v0.3.1) changes nothing that builds and fails the artifacts step."
+      ],
+      "matchFileNames": ["web/flowmap/go.mod"],
+      "matchDepNames": ["github.com/go-wasmcontainers/relay"],
+      "enabled": false
+    }
+  ]
+}
