@@ -7,7 +7,7 @@ require (
 	github.com/go-wasmcontainers/relay v0.1.0
 	github.com/go-widgets/painter v0.16.0
 	github.com/go-widgets/toolkit v0.345.2
-	github.com/go-widgets/webcanvas v0.6.0
+	github.com/go-widgets/webcanvas v0.7.0
 	github.com/mxschmitt/playwright-go v0.6201.1
 )
 
