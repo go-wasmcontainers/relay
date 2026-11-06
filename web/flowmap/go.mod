@@ -5,10 +5,10 @@ go 1.27.3
 require (
 	connectrpc.com/connect/v2 v2.0.2
 	github.com/go-wasmcontainers/relay v0.1.0
-	github.com/go-widgets/painter v0.16.1
-	github.com/go-widgets/toolkit v0.350.0
-	github.com/go-widgets/webcanvas v0.7.0
-	github.com/mxschmitt/playwright-go v0.6201.1
+	github.com/go-widgets/painter v0.17.0
+	github.com/go-widgets/toolkit v0.356.0
+	github.com/go-widgets/webcanvas v0.8.0
+	github.com/mxschmitt/playwright-go v0.6401.0
 )
 
 require (
@@ -17,9 +17,9 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
-	github.com/go-authn/oidc v0.4.3 // indirect
+	github.com/go-authn/oidc v0.7.0 // indirect
 	github.com/go-crdt/crdt v0.57.0 // indirect
-	github.com/go-gfx/gfx v0.37.0 // indirect
+	github.com/go-gfx/gfx v0.41.0 // indirect
 	github.com/go-icons/iconoir v0.3.0 // indirect
 	github.com/go-images/images v0.1.1-0.20261026203936-4ac989d310a1 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
@@ -29,6 +29,7 @@ require (
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/go-typeset/bidi v0.3.1 // indirect
 	github.com/go-widgets/mvvm v0.15.0 // indirect
+	github.com/go-widgets/textinput v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect

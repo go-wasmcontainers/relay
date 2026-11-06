@@ -6,8 +6,8 @@ require (
 	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/cors v0.1.0
 	github.com/coder/websocket v1.8.15
-	github.com/go-authn/oidc v0.4.3
-	github.com/go-authn/servercert v0.5.3
+	github.com/go-authn/oidc v0.7.0
+	github.com/go-authn/servercert v0.6.0
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/protobuf v1.36.12
 )
