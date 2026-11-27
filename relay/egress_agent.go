@@ -37,6 +37,9 @@ type agent struct {
 	pending map[uint32]expect
 	st      map[uint32]*estream
 	stopped bool
+	// stopOnce makes stop safe to call from the relay (kick, rotation) and
+	// from the read loop at the same time.
+	stopOnce sync.Once
 }
 
 // expect is what the relay decided about a stream before it asked the agent
@@ -97,12 +100,10 @@ func (a *agent) sendResult(t frame.Type, id uint32, code v1.Code, msg string) {
 }
 
 // stop closes every outside socket and the pipe.
-func (a *agent) stop() {
+func (a *agent) stop() { a.stopOnce.Do(a.doStop) }
+
+func (a *agent) doStop() {
 	a.mu.Lock()
-	if a.stopped {
-		a.mu.Unlock()
-		return
-	}
 	a.stopped = true
 	streams := make([]*estream, 0, len(a.st))
 	for _, s := range a.st {

@@ -212,6 +212,11 @@ func TestRefusals(t *testing.T) {
 	if _, err := run(t, ctx, "teacher-session", "--state-dir="+sd); err == nil {
 		t.Fatal("teacher-session without --out")
 	}
+	// An explicit empty --egress is an error, never "everything" and never
+	// "nothing" quietly.
+	if _, err := run(t, ctx, "class", "create", "x", "--egress=", "--state-dir="+sd); err == nil || !strings.Contains(err.Error(), "--egress needs at least one") {
+		t.Fatalf("empty --egress: %v", err)
+	}
 	out, err := run(t, ctx, "version")
 	if err != nil || !strings.Contains(out, "wctr-relay") {
 		t.Fatal(out, err)
