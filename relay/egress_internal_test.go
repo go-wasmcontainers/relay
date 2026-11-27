@@ -93,11 +93,11 @@ func TestConnectEgressNoEphemeralPortLeft(t *testing.T) {
 func TestAgentStopsWhenPipeDies(t *testing.T) {
 	x := newAgentEnv(t, EgressLimits{})
 	_ = x.ag.t.Close("test")
-	eventually(t, "the agent stopped", func() bool {
-		x.ag.mu.Lock()
-		defer x.ag.mu.Unlock()
-		return x.ag.stopped
-	})
+	select {
+	case <-x.ag.runDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the agent's read loop outlived its pipe")
+	}
 }
 
 // A class without egress tells its members so.

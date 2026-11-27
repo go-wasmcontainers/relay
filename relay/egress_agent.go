@@ -40,6 +40,8 @@ type agent struct {
 	// stopOnce makes stop safe to call from the relay (kick, rotation) and
 	// from the read loop at the same time.
 	stopOnce sync.Once
+	// runDone is closed when the read loop returns.
+	runDone chan struct{}
 }
 
 // expect is what the relay decided about a stream before it asked the agent
@@ -68,7 +70,7 @@ func (s *egressSess) agentFor(e *egressClass, guest *conn) *agent {
 	cn.lastSeen.Store(r.cfg.Now().Unix())
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &agent{e: e, sess: s, cn: cn, t: ta, ctx: ctx, cancel: cancel,
-		pending: map[uint32]expect{}, st: map[uint32]*estream{}}
+		pending: map[uint32]expect{}, st: map[uint32]*estream{}, runDone: make(chan struct{})}
 	s.agent = a
 	go cn.writer(ctx)
 	go func() {
@@ -119,6 +121,7 @@ func (a *agent) doStop() {
 }
 
 func (a *agent) run() {
+	defer close(a.runDone)
 	for {
 		msg, err := a.t.ReadMessage(a.ctx)
 		if err != nil {
