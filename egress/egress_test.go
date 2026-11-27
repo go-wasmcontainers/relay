@@ -438,3 +438,47 @@ func FuzzParseAllowlist(f *testing.F) {
 		}
 	})
 }
+
+// A pin whose name was removed from the allowlist is refused (the list is
+// re-read at connect time, not only at resolve time).
+func TestAuthorizeRechecksAllowlist(t *testing.T) {
+	g, p, _ := newGW(t, &fakeResolver{})
+	ip := netip.MustParseAddr("93.184.216.34")
+	if err := p.pin(ip, "gone.example.com", g.now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Authorize(p, ip, 443); !errors.Is(err, ErrNotAllowlisted) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// Lengths that lie by one in either direction are refused, never read past.
+func TestClientHelloLengthsLie(t *testing.T) {
+	ok := hello(sniExt("api.example.com"))
+	// handshake length: record header is 5 bytes, handshake type 1, length 3.
+	for _, d := range []int{1, -1} {
+		b := append([]byte(nil), ok...)
+		hl := int(b[6])<<16 | int(b[7])<<8 | int(b[8])
+		hl += d
+		b[6], b[7], b[8] = byte(hl>>16), byte(hl>>8), byte(hl)
+		n, err := ClientHelloSNI(b)
+		if d == 1 && !errors.Is(err, ErrSplitHello) {
+			t.Errorf("hl+1: %q %v", n, err)
+		}
+		if d == -1 && err == nil {
+			t.Errorf("hl-1 accepted %q", n)
+		}
+	}
+	// extensions length one too long, one too short.
+	for _, d := range []int{1, -1} {
+		b := append([]byte(nil), ok...)
+		// extensions length sits 2 bytes before the first extension, which is
+		// len(sniExt) from the end.
+		i := len(b) - len(sniExt("api.example.com")) - 2
+		el := int(b[i])<<8 | int(b[i+1]) + d
+		b[i], b[i+1] = byte(el>>8), byte(el)
+		if n, err := ClientHelloSNI(b); !errors.Is(err, ErrBadHello) {
+			t.Errorf("el%+d: %q %v", d, n, err)
+		}
+	}
+}
