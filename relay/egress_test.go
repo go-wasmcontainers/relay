@@ -16,6 +16,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -745,6 +746,8 @@ func TestEgressKickEndsStreams(t *testing.T) {
 // agent serves them all.
 func TestEgressKickEndsEveryStream(t *testing.T) {
 	x := newEgEnv(t, relay.EgressLimits{})
+	time.Sleep(50 * time.Millisecond)
+	base := runtime.NumGoroutine()
 	_, ep := x.person("ann")
 	resolve(t, ep, "api.example.org")
 	for i := 0; i < 3; i++ {
@@ -764,6 +767,9 @@ func TestEgressKickEndsEveryStream(t *testing.T) {
 			t.Fatalf("outside socket %d of a kicked session is still open", i)
 		}
 	}
+	// One agent served the three streams, and it is gone: nothing of the
+	// session is left running.
+	eventually(t, "the session's goroutines ended", func() bool { return runtime.NumGoroutine() <= base+1 })
 }
 
 // A dial that returns after its stream was killed must not leave an open
