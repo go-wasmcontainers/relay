@@ -5,7 +5,6 @@ package egress
 import (
 	"errors"
 	"fmt"
-	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,9 +87,6 @@ func checkHost(h string) error {
 	case strings.ContainsAny(h, "*?/\\@[] "):
 		return errors.New("wildcards, CIDR, paths and brackets are refused; write an exact host name")
 	}
-	if _, err := netip.ParseAddr(h); err == nil {
-		return errors.New("an IP address is refused; write a host name")
-	}
 	labels := strings.Split(h, ".")
 	if len(labels) < 2 {
 		return errors.New("a bare name or TLD is refused; write a fully qualified host name")
@@ -106,10 +102,11 @@ func checkHost(h string) error {
 			}
 		}
 	}
-	// A numeric last label would make "1.2.3.4"-like names; no TLD is numeric.
+	// An IP literal ends in a number and no TLD starts with a digit; IPv6
+	// literals fail the label alphabet above (':').
 	last := labels[len(labels)-1]
 	if last[0] >= '0' && last[0] <= '9' {
-		return errors.New("the last label must not start with a digit")
+		return errors.New("an IP address is refused (the last label must not start with a digit); write a host name")
 	}
 	return nil
 }

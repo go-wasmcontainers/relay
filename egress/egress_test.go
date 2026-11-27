@@ -482,3 +482,75 @@ func TestClientHelloLengthsLie(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveErrorsPropagate(t *testing.T) {
+	boom := errors.New("boom")
+	g, p, _ := newGW(t, &fakeResolver{err: boom})
+	if _, err := g.Resolve(context.Background(), p, "api.example.com"); !errors.Is(err, boom) {
+		t.Errorf("resolver error: %v", err)
+	}
+	// An answer with only IPv6 addresses has nothing usable in v1 (D7).
+	g, p, _ = newGW(t, &fakeResolver{answers: map[string][]netip.Addr{"api.example.com": ips("2606:2800:220:1::1")}})
+	if _, err := g.Resolve(context.Background(), p, "api.example.com"); !errors.Is(err, ErrNoAddress) {
+		t.Errorf("v6 only: %v", err)
+	}
+	if p.Len() != 0 {
+		t.Errorf("%d pinned", p.Len())
+	}
+	// A full pin table refuses the resolve with ErrLimit.
+	g, p, _ = newGW(t, &fakeResolver{answers: map[string][]netip.Addr{"api.example.com": ips("93.184.216.34")}})
+	for i := 0; i < MaxPins; i++ {
+		if err := p.pin(netip.AddrFrom4([4]byte{8, 8, byte(i >> 8), byte(i)}), "api.example.com", g.now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := g.Resolve(context.Background(), p, "api.example.com"); !errors.Is(err, ErrLimit) {
+		t.Errorf("full table: %v", err)
+	}
+}
+
+func TestCheckHelloPropagatesParseErrors(t *testing.T) {
+	if err := CheckHello("api.example.com", []byte("GET / HTTP/1.1\r\n\r\n")); !errors.Is(err, ErrNotTLS) {
+		t.Errorf("not tls: %v", err)
+	}
+	if err := CheckHello("api.example.com", []byte{0x16, 3, 1}); !errors.Is(err, ErrNeedMore) {
+		t.Errorf("short: %v", err)
+	}
+}
+
+func TestControlSaysWhy(t *testing.T) {
+	g, _, _ := newGW(t, &fakeResolver{})
+	if err := g.Control("tcp", "example.com:443", nil); err == nil || !strings.Contains(err.Error(), "not a literal") {
+		t.Errorf("name: %v", err)
+	}
+	if err := g.Control("tcp", "93.184.216.34:80", nil); !errors.Is(err, ErrPort) {
+		t.Errorf("port: %v", err)
+	}
+}
+
+func TestMalformedServerNameExtensions(t *testing.T) {
+	for name, b := range map[string][]byte{
+		"empty body":      hello(ext(0, nil)),
+		"one byte body":   hello(ext(0, []byte{0})),
+		"list too long":   hello(ext(0, []byte{0, 9, 0, 0, 1, 'a'})),
+		"empty host name": hello(ext(0, []byte{0, 3, 0, 0, 0})),
+		"truncated entry": hello(ext(0, []byte{0, 2, 0, 0})),
+		"ext past end":    hello([]byte{0, 0, 0, 200, 1}),
+	} {
+		if n, err := ClientHelloSNI(b); !errors.Is(err, ErrBadHello) {
+			t.Errorf("%s: %q %v", name, n, err)
+		}
+	}
+	// A non-host_name entry is skipped, not read as a name.
+	other := hello(ext(0, []byte{0, 4, 1, 0, 1, 'a'}))
+	if n, err := ClientHelloSNI(other); !errors.Is(err, ErrNoSNI) {
+		t.Errorf("name type 1: %q %v", n, err)
+	}
+	// Truncated fixed fields.
+	for _, body := range [][]byte{{1, 0, 0, 0}, {1, 0, 0, 3, 3, 3, 0}, {1, 0, 0, 40, 3, 3}} {
+		b := append([]byte{0x16, 3, 1, 0, byte(len(body))}, body...)
+		if n, err := ClientHelloSNI(b); err == nil {
+			t.Errorf("accepted %q", n)
+		}
+	}
+}

@@ -23,33 +23,42 @@ var (
 	ErrMultiSNI   = errors.New("egress: more than one server name")
 )
 
+// reader is a sticky-error cursor: after one read past the end every read
+// returns zero and bad stays set, so a parser checks bad once per structure.
 type reader struct {
-	b []byte
+	b   []byte
+	bad bool
 }
 
-func (r *reader) take(n int) ([]byte, bool) {
-	if n < 0 || n > len(r.b) {
-		return nil, false
+func (r *reader) take(n int) []byte {
+	if r.bad || n > len(r.b) {
+		r.bad, r.b = true, nil
+		return nil
 	}
 	out := r.b[:n]
 	r.b = r.b[n:]
-	return out, true
+	return out
 }
 
-func (r *reader) u8() (int, bool) {
-	b, ok := r.take(1)
-	if !ok {
-		return 0, false
+func (r *reader) u8() int {
+	if b := r.take(1); b != nil {
+		return int(b[0])
 	}
-	return int(b[0]), true
+	return 0
 }
 
-func (r *reader) u16() (int, bool) {
-	b, ok := r.take(2)
-	if !ok {
-		return 0, false
+func (r *reader) u16() int {
+	if b := r.take(2); b != nil {
+		return int(b[0])<<8 | int(b[1])
 	}
-	return int(b[0])<<8 | int(b[1]), true
+	return 0
+}
+
+func (r *reader) u24() int {
+	if b := r.take(3); b != nil {
+		return int(b[0])<<16 | int(b[1])<<8 | int(b[2])
+	}
+	return 0
 }
 
 // ClientHelloSNI returns the host_name of the server_name extension (RFC 6066
@@ -77,88 +86,50 @@ func ClientHelloSNI(b []byte) (string, error) {
 		return "", ErrNeedMore
 	}
 	r := &reader{b: b[5 : 5+n]}
-	if t, ok := r.u8(); !ok || t != 1 {
+	if r.u8() != 1 {
 		return "", ErrNotTLS // not a ClientHello
 	}
-	l3, ok := r.take(3)
-	if !ok {
+	hl := r.u24()
+	if r.bad {
 		return "", ErrBadHello
 	}
-	hl := int(l3[0])<<16 | int(l3[1])<<8 | int(l3[2])
 	if hl > len(r.b) {
 		return "", ErrSplitHello
 	}
 	r.b = r.b[:hl]
-	if _, ok := r.take(2 + 32); !ok { // legacy_version, random
-		return "", ErrBadHello
-	}
-	sl, ok := r.u8()
-	if !ok {
-		return "", ErrBadHello
-	}
-	if _, ok := r.take(sl); !ok { // legacy_session_id
-		return "", ErrBadHello
-	}
-	cl, ok := r.u16()
-	if !ok {
-		return "", ErrBadHello
-	}
-	if _, ok := r.take(cl); !ok { // cipher_suites
-		return "", ErrBadHello
-	}
-	ml, ok := r.u8()
-	if !ok {
-		return "", ErrBadHello
-	}
-	if _, ok := r.take(ml); !ok { // compression_methods
-		return "", ErrBadHello
-	}
-	el, ok := r.u16()
-	if !ok || el != len(r.b) {
+	r.take(2 + 32)  // legacy_version, random
+	r.take(r.u8())  // legacy_session_id
+	r.take(r.u16()) // cipher_suites
+	r.take(r.u8())  // compression_methods
+	el := r.u16()
+	if r.bad || el != len(r.b) {
 		return "", ErrBadHello
 	}
 	name := ""
 	for len(r.b) > 0 {
-		typ, ok := r.u16()
-		if !ok {
-			return "", ErrBadHello
-		}
-		xl, ok := r.u16()
-		if !ok {
-			return "", ErrBadHello
-		}
-		xb, ok := r.take(xl)
-		if !ok {
+		typ := r.u16()
+		xb := r.take(r.u16())
+		if r.bad {
 			return "", ErrBadHello
 		}
 		if typ != 0 {
 			continue
 		}
-		if name != "" {
-			return "", ErrMultiSNI
-		}
 		x := &reader{b: xb}
-		ll, ok := x.u16()
-		if !ok || ll != len(x.b) {
+		ll := x.u16()
+		if x.bad || ll != len(x.b) {
 			return "", ErrBadHello
 		}
 		for len(x.b) > 0 {
-			nt, ok := x.u8()
-			if !ok {
-				return "", ErrBadHello
-			}
-			nl, ok := x.u16()
-			if !ok {
-				return "", ErrBadHello
-			}
-			nb, ok := x.take(nl)
-			if !ok {
+			nt := x.u8()
+			nb := x.take(x.u16())
+			if x.bad || len(nb) == 0 {
 				return "", ErrBadHello
 			}
 			if nt != 0 {
 				continue
 			}
-			if name != "" || len(nb) == 0 {
+			if name != "" {
 				return "", ErrMultiSNI
 			}
 			for _, c := range nb {

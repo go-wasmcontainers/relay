@@ -205,10 +205,7 @@ func (p *Pins) lookup(a netip.Addr, now time.Time) (string, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	v, ok := p.m[a]
-	if !ok {
-		return "", false
-	}
-	if !now.Before(v.expires) {
+	if !ok || !now.Before(v.expires) {
 		delete(p.m, a)
 		return "", false
 	}
