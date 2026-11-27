@@ -134,11 +134,14 @@ func (r *Relay) Serve(ctx context.Context, t Transport, claims auth.Claims) erro
 	old := c.conns[s.ID]
 	c.conns[s.ID] = cn
 	welcome := &v1.Welcome{Version: frame.Version, Session: c.sessionProto(s), Network: c.networkProto(),
-		RelayId: r.cfg.RelayID, Epoch: c.s.Epoch, TokenExpiresUnix: claims.Expiry.Unix(), Egress: c.egressProto(),
+		RelayId: r.cfg.RelayID, Epoch: c.s.Epoch, TokenExpiresUnix: claims.Expiry.Unix(),
 		Limits: &v1.Limits{MaxStreams: uint32(lim.MaxStreams), MaxListeners: uint32(lim.MaxListeners),
 			MaxPorts: uint32(lim.MaxPorts), StreamWindow: lim.StreamWindow, MaxPayload: frame.MaxPayload,
 			BytesPerSecond: uint64(lim.BytesPerSecond), FramesPerSecond: uint32(lim.FramesPerSecond)}}
+	eg := c.eg
 	r.mu.Unlock()
+	// The egress state needs no relay lock, so it is built outside it.
+	welcome.Egress = eg.proto()
 	if old != nil {
 		old.goAway(v1.Code_CODE_RESET, "replaced by a newer connection of the same session")
 	}

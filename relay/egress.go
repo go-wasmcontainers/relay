@@ -250,18 +250,18 @@ func (e *egressClass) proto() *v1.EgressState {
 	return st
 }
 
-func (c *class) egressProto() *v1.EgressState { return c.eg.proto() }
-
 // EgressState is what members of the class are told about outbound access,
 // with the live counters.
 func (r *Relay) EgressState(classID string) (*v1.EgressState, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	c, ok := r.classes[classID]
 	if !ok {
+		r.mu.Unlock()
 		return nil, errf(KindNotFound, "no class %s", classID)
 	}
-	return c.egressProto(), nil
+	eg := c.eg
+	r.mu.Unlock()
+	return eg.proto(), nil
 }
 
 // denyKind classifies a gateway refusal for the counters.
