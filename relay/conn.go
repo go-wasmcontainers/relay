@@ -76,6 +76,7 @@ type link struct {
 	closed       [2]atomic.Bool
 	gone         atomic.Bool
 	egress, ingr string
+	eg           *egressLink // set when b is the egress agent, not a container
 	timer        *time.Timer
 	opened       time.Time
 }
@@ -133,7 +134,7 @@ func (r *Relay) Serve(ctx context.Context, t Transport, claims auth.Claims) erro
 	old := c.conns[s.ID]
 	c.conns[s.ID] = cn
 	welcome := &v1.Welcome{Version: frame.Version, Session: c.sessionProto(s), Network: c.networkProto(),
-		RelayId: r.cfg.RelayID, Epoch: c.s.Epoch, TokenExpiresUnix: claims.Expiry.Unix(),
+		RelayId: r.cfg.RelayID, Epoch: c.s.Epoch, TokenExpiresUnix: claims.Expiry.Unix(), Egress: c.egressProto(),
 		Limits: &v1.Limits{MaxStreams: uint32(lim.MaxStreams), MaxListeners: uint32(lim.MaxListeners),
 			MaxPorts: uint32(lim.MaxPorts), StreamWindow: lim.StreamWindow, MaxPayload: frame.MaxPayload,
 			BytesPerSecond: uint64(lim.BytesPerSecond), FramesPerSecond: uint32(lim.FramesPerSecond)}}
@@ -305,6 +306,9 @@ func (cn *conn) shutdown(reason string) {
 		}
 		if c.conns[cn.session] == cn {
 			delete(c.conns, cn.session)
+		}
+		if c.eg != nil {
+			c.eg.agentGone(cn)
 		}
 		r.mu.Unlock()
 	})
@@ -547,12 +551,24 @@ func (cn *conn) resolve(id uint32, m *v1.Resolve) {
 	if s != nil {
 		addrs = cn.c.resolve(s, m.Name)
 	}
-	r.mu.Unlock()
-	out := &v1.Resolved{}
-	for _, a := range addrs {
-		out.Ips = append(out.Ips, a.String())
+	var es *egressSess
+	if s != nil && len(addrs) == 0 && cn.c.eg != nil && !cn.c.isClassName(m.Name) {
+		es = cn.c.eg.session(cn.session)
 	}
-	cn.sendMsg(frame.TypeResolved, id, out)
+	r.mu.Unlock()
+	reply := func(addrs []netip.Addr) {
+		out := &v1.Resolved{}
+		for _, a := range addrs {
+			out.Ips = append(out.Ips, a.String())
+		}
+		cn.sendMsg(frame.TypeResolved, id, out)
+	}
+	if es != nil {
+		// The one outside lookup: an allowlisted name, off the read loop.
+		go func() { reply(cn.c.eg.lookup(es, m.Name)) }()
+		return
+	}
+	reply(addrs)
 }
 
 // ------------------------------------------------------------------ streams
@@ -590,7 +606,7 @@ func (cn *conn) connect(id uint32, m *v1.Connect) error {
 	srcAddr := c.portAddr(p)
 	dstPortID, ok := c.byAddr[dst]
 	if !ok {
-		return refuse(v1.Code_CODE_UNREACHABLE, "no container has this address")
+		return cn.connectEgress(id, m, dst, srcAddr, refuse)
 	}
 	srcPort := c.freeEphemeral(m.PortId, srcAddr, firewall.TCP)
 	if srcPort == 0 {
@@ -750,6 +766,9 @@ func (c *class) finish(l *link, verdict v1.Verdict, why string) {
 	delete(l.b.streams, l.bID)
 	l.b.mu.Unlock()
 	delete(c.links, l)
+	if l.eg != nil {
+		c.eg.release(l)
+	}
 	c.logFlow(l.flow, l.aPort, l.bPort, verdict, firewall.Decision{Allowed: verdict != v1.Verdict_VERDICT_REVOKED,
 		EgressRule: l.egress, IngressRule: l.ingr, Reason: why}, l.sent[0].Load(), l.sent[1].Load())
 }
@@ -801,6 +820,9 @@ func (cn *conn) datagram(m *v1.Datagram) {
 	}
 	dstPortID, ok := c.byAddr[dst]
 	if !ok {
+		if c.eg != nil {
+			c.eg.ctr.udp.Add(1) // there is no UDP or QUIC outside the class
+		}
 		return
 	}
 	flow := firewall.Flow{Protocol: firewall.UDP, Src: netip.AddrPortFrom(srcAddr, srcPort), Dst: netip.AddrPortFrom(dst, uint16(m.DstPort))}

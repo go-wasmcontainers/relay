@@ -199,6 +199,26 @@ func TestResolveRebinding(t *testing.T) {
 	}
 }
 
+// Clear forgets every pin, so an address resolved before a rotation is
+// refused until the name is resolved again.
+func TestPinsClear(t *testing.T) {
+	r := &fakeResolver{answers: map[string][]netip.Addr{"api.example.com": ips("93.184.216.34")}}
+	g, p, _ := newGW(t, r)
+	if _, err := g.Resolve(context.Background(), p, "api.example.com"); err != nil || p.Len() != 1 {
+		t.Fatalf("resolve: %v, %d pins", err, p.Len())
+	}
+	p.Clear()
+	if p.Len() != 0 {
+		t.Fatalf("%d pins after Clear", p.Len())
+	}
+	if _, err := g.Authorize(p, netip.MustParseAddr("93.184.216.34"), 443); !errors.Is(err, ErrNotPinned) {
+		t.Fatalf("after Clear: %v", err)
+	}
+	if _, err := g.Resolve(context.Background(), p, "api.example.com"); err != nil || p.Len() != 1 {
+		t.Fatalf("resolve again: %v, %d pins", err, p.Len())
+	}
+}
+
 func TestResolvePinsAndAuthorize(t *testing.T) {
 	r := &fakeResolver{answers: map[string][]netip.Addr{"api.example.com": ips("93.184.216.34", "2606:2800:220:1::1")}}
 	g, p, now := newGW(t, r)

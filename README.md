@@ -90,7 +90,7 @@ A plain `go install` serves the page, which then says the map is missing.
 | --- | --- |
 | `init [--name N] [--ip A]` | state directory (`0700`): admin token, signing keys, internal CA for those names |
 | `serve` | run the relay (flags below) |
-| `class create NAME [--cidr --session-bits --domain --template --allow --require-identity]` | a class and its join code |
+| `class create NAME [--cidr --session-bits --domain --template --allow --require-identity --egress]` | a class and its join code; `--egress host:443` (repeatable) opens [outbound egress](#outbound-egress) |
 | `class list`, `delete`, `rotate-code`, `sessions`, `kick` | manage classes and sessions |
 | `sg list`, `sg create NAME [--stateless]`, `sg delete` | security groups |
 | `rule add GROUP --ingress\|--egress [--proto --port --remote-ip\|--remote-group]`, `rule delete ID` | rules (allow only); deleting one resets the flows only it allowed |
@@ -115,7 +115,9 @@ Pages playground, must be listed; the admin listener has no CORS);
 `--host` (Host names served); `--oidc-issuer`, `--oidc-audience`,
 `--oidc-type`, `--teacher-group` (OpenID Connect through
 [go-authn/oidc](https://github.com/go-authn/oidc)); `--admin-listen` (admin
-API on TCP with TLS); `--session-ttl`; `--audit-retention`. The admin API is
+API on TCP with TLS); `--session-ttl`; `--audit-retention`;
+`--egress-operator` (the name shown to students as the party that sees their
+outbound destinations; default the relay's ID). The admin API is
 on the state directory's Unix socket (`0600`), or the path given with
 `--admin-socket` (to `serve` and to the CLI alike; a Unix socket path holds
 at most 103 bytes on macOS and 107 on Linux, and a longer one is refused with
@@ -131,12 +133,59 @@ that reason); the CLI uses it, or `--server https://… --token-file FILE`.
 | `relay` | the core: classes, sessions, ports, addresses, DNS, the stream and datagram broker, credit flow control, connection tracking, revocation, quotas, rate limits, flow log, `Store` (a file now, replicated later) |
 | `driver` | the client an engine uses: `Session`, `Endpoint` with `Listen`, `Dial`, `ListenPacket`, `Resolve` returning `net` types; builds for `js/wasm` |
 | `server` | the WebSocket data plane and the Connect handlers; public and admin handlers; OpenID Connect; pre-authentication limits |
+| `egress` | the outbound gateway's policy: the allowlist, the deny tables, the resolve-and-pin step, the TLS ClientHello check; pure, no sockets |
 | `tlsca` | the internal, name-constrained CA |
 | `cmd/wctr-relay`, `internal/cli` | the cobra command line |
 | `web/flowmap` (own module) | the flow-map page: view model, scene (go-widgets `GraphView`, `LogView`), its WebAssembly main, browser tests |
 | `internal/buildflowmap` | builds the page's WebAssembly for `-tags flowmap` |
 
 The contract the engine implements is in [docs/NETWORKDRIVER.md](docs/NETWORKDRIVER.md).
+
+## Outbound egress
+
+A class can let its containers reach a short list of public hosts. The relay
+is the only gateway: nothing else in the class has a route out.
+
+```sh
+wctr-relay class create lab --require-identity --allow group:students \
+    --egress api.example.org:443 --egress pypi.org:443
+```
+
+- **Needs identity and an audience.** `--egress` is refused unless the class
+  has `--require-identity` and a non-empty `--allow`; a stored class that
+  lost either is refused when the relay starts. No flag waives this.
+- **Exact `host:443` entries.** No wildcard, no IP, no CIDR, no port other
+  than 443, and an empty list is an error, not "everything".
+- **Resolve, then pin.** The guest asks for a name; the relay resolves it
+  outside, refuses the whole answer if any address is in a deny table
+  (loopback, RFC 1918, link-local and the cloud metadata address, CGNAT,
+  multicast, reserved, IPv4-embedding IPv6 prefixes, the class's own CIDR),
+  and pins the addresses to that session for 5 minutes. A connection to any
+  other address is refused, so DNS rebinding and IP literals get nowhere.
+- **SNI must match.** The first TLS record is buffered (at most 16 KiB) and
+  its server name must equal the pinned name; missing, mismatched, split
+  across records, oversize or non-TLS streams are reset and counted. Nothing
+  of a refused stream reaches the outside.
+- **TCP only.** UDP and QUIC are dropped and counted. No IPv6 egress, though
+  the IPv6 deny table ships and is tested.
+- **Limits**, per session unless stated: 16 concurrent streams, 2 new
+  connections per second (burst 20), 1 GiB per day, 8 lookups per second, 5
+  minutes idle, 1 hour lifetime; per destination 64 streams across the class;
+  8 MiB/s across the class. Over a limit the guest sees `ENOBUFS`
+  (`CODE_LIMIT`); a policy refusal is `ECONNREFUSED` (`CODE_REFUSED`). A
+  refusal after the stream was accepted (an SNI mismatch) shows up as
+  `ECONNRESET`.
+- **Ends with the session.** A kick, a join-code rotation or deleting the
+  class closes the live egress streams and forgets the pins.
+- **Logged, and said so.** Destinations are written to the flow log and kept
+  for the audit retention (30 days by default). Every student's Welcome
+  carries the operator's name, the allowlist, the limits and the counters, so
+  the UI can say who sees what.
+- **Personal egress** is running your own relay with a one-person class:
+  you are the operator, and the list is yours.
+
+Caveat: egress is for names you trust to be reached by every student of the
+class; the relay is the audit point, not a content filter.
 
 ## Security
 
@@ -162,7 +211,8 @@ The contract the engine implements is in [docs/NETWORKDRIVER.md](docs/NETWORKDRI
   Connect, a pseudonymous hash of issuer and subject; deleting a class deletes
   them. The audit log keeps 30 days by default.
 - **Fuzzed** in CI: the frame decoder, the token parser, join codes, labels,
-  CLI rule specs, and the relay fed arbitrary frames (`FuzzServe`).
+  CLI rule specs, the egress allowlist parser and ClientHello reader, and the
+  relay fed arbitrary frames (`FuzzServe`).
   `govulncheck` runs on every change.
 
 ## Performance
@@ -183,7 +233,7 @@ They are an open item.
 - The engine does not use the driver yet (its `NetworkDriver` is the engine's
   to write); the browser path, the playground served by the relay, join-flow
   detection and WebTransport are later milestones (M-relay-3 and -4).
-- No ICMP (M-relay-5), no IPv6. The flow map has no pause/replay yet (the
+- No ICMP (M-relay-5), no IPv6 (and no IPv6 egress). The flow map has no pause/replay yet (the
   relay keeps the last 1 000 events; the page shows the last 200).
 - One relay per class: high availability (Raft, epoch leases) is M-relay-HA.
 - servercert has no DNS-01 yet ([go-authn/servercert#16](https://github.com/go-authn/servercert/issues/16)),

@@ -44,6 +44,7 @@ type serveFlags struct {
 	auditRetention           time.Duration
 	sessionTTL               time.Duration
 	relayID                  string
+	egressOperator           string
 }
 
 // serveReady, when set (tests), receives the public listener's address.
@@ -85,6 +86,7 @@ func serveCmd(g *globals) *cobra.Command {
 	fl.StringVar(&f.teacherGroup, "teacher-group", "", "groups-claim value that grants the teacher role on --admin-listen")
 	fl.DurationVar(&f.auditRetention, "audit-retention", 30*24*time.Hour, "audit log retention")
 	fl.DurationVar(&f.sessionTTL, "session-ttl", 12*time.Hour, "session token lifetime")
+	fl.StringVar(&f.egressOperator, "egress-operator", "", "who runs this relay, shown to members of a class with outbound access (default: the relay id)")
 	fl.StringVar(&f.relayID, "relay-id", "", "this relay's id (default: the host name)")
 	return cmd
 }
@@ -186,7 +188,7 @@ func serve(cmd *cobra.Command, g *globals, f *serveFlags) error {
 		id, _ = os.Hostname()
 	}
 	r, err := relay.New(relay.Config{RelayID: id, Store: relay.FileStore{Path: d.State()}, Keys: keys,
-		SessionTTL: f.sessionTTL, Audit: audit.Write})
+		SessionTTL: f.sessionTTL, Audit: audit.Write, Egress: relay.EgressConfig{Operator: f.egressOperator}})
 	if err != nil {
 		return err
 	}

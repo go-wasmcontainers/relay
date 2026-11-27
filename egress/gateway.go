@@ -212,6 +212,13 @@ func (p *Pins) lookup(a netip.Addr, now time.Time) (string, bool) {
 	return v.name, true
 }
 
+// Clear forgets every pin: the session must resolve again.
+func (p *Pins) Clear() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	clear(p.m)
+}
+
 // Len is the number of pins held (expired ones included until touched).
 func (p *Pins) Len() int {
 	p.mu.Lock()
