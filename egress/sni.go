@@ -90,9 +90,6 @@ func ClientHelloSNI(b []byte) (string, error) {
 		return "", ErrNotTLS // not a ClientHello
 	}
 	hl := r.u24()
-	if r.bad {
-		return "", ErrBadHello
-	}
 	if hl > len(r.b) {
 		return "", ErrSplitHello
 	}

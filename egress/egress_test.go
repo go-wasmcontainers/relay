@@ -530,12 +530,13 @@ func TestControlSaysWhy(t *testing.T) {
 
 func TestMalformedServerNameExtensions(t *testing.T) {
 	for name, b := range map[string][]byte{
-		"empty body":      hello(ext(0, nil)),
-		"one byte body":   hello(ext(0, []byte{0})),
-		"list too long":   hello(ext(0, []byte{0, 9, 0, 0, 1, 'a'})),
-		"empty host name": hello(ext(0, []byte{0, 3, 0, 0, 0})),
-		"truncated entry": hello(ext(0, []byte{0, 2, 0, 0})),
-		"ext past end":    hello([]byte{0, 0, 0, 200, 1}),
+		"empty body":         hello(ext(0, nil)),
+		"one byte body":      hello(ext(0, []byte{0})),
+		"list too long":      hello(ext(0, []byte{0, 9, 0, 0, 1, 'a'})),
+		"empty host name":    hello(ext(0, []byte{0, 3, 0, 0, 0})),
+		"truncated entry":    hello(ext(0, []byte{0, 2, 0, 0})),
+		"ext past end":       hello([]byte{0, 0, 0, 200, 1}),
+		"other ext past end": hello(sniExt("api.example.com"), []byte{0, 10, 0, 200, 1}),
 	} {
 		if n, err := ClientHelloSNI(b); !errors.Is(err, ErrBadHello) {
 			t.Errorf("%s: %q %v", name, n, err)
