@@ -71,14 +71,21 @@ func (c countConn) Read(p []byte) (int, error) {
 // stands for the whole outside.
 type egEnv struct {
 	*env
-	dns     *fakeDNS
-	srv     net.Listener
-	rawIn   atomic.Int64 // bytes the outside server received
-	conns   atomic.Int64 // TCP connections it accepted
-	closed  chan struct{}
-	dialed  atomic.Int64
-	counter int
+	dns    *fakeDNS
+	srv    net.Listener
+	rawIn  atomic.Int64 // bytes the outside server received
+	conns  atomic.Int64 // TCP connections it accepted
+	closed chan struct{}
+	dialed atomic.Int64
+	mode   atomic.Int32 // what the outside server does after the handshake
+	hold   atomic.Pointer[chan struct{}]
 }
+
+const (
+	modeEcho = iota
+	modeSink
+	modeFlood
+)
 
 func testCert(t *testing.T) tls.Certificate {
 	t.Helper()
@@ -120,7 +127,15 @@ func newEgEnv(t *testing.T, lim relay.EgressLimits) *egEnv {
 				if tc.Handshake() != nil {
 					return
 				}
-				io.Copy(tc, tc)
+				switch x.mode.Load() {
+				case modeSink:
+					io.Copy(io.Discard, tc)
+				case modeFlood:
+					tc.Write(make([]byte, 200000))
+					io.Copy(io.Discard, tc)
+				default:
+					io.Copy(tc, tc)
+				}
 			}()
 		}
 	}()
@@ -131,6 +146,12 @@ func newEgEnv(t *testing.T, lim relay.EgressLimits) *egEnv {
 	r, err := relay.New(relay.Config{Keys: k, Egress: relay.EgressConfig{Resolver: x.dns, Limits: lim, Operator: "test operator",
 		Dial: func(ctx context.Context, ip netip.Addr, port uint16) (net.Conn, error) {
 			x.dialed.Add(1)
+			if h := x.hold.Load(); h != nil {
+				<-*h // deliberately ignores ctx: a dial that returns after the stream was killed
+			}
+			if x.hold.Load() != nil {
+				ctx = context.Background() // the late dial of a killed stream still connects
+			}
 			return (&net.Dialer{}).DialContext(ctx, "tcp", srv.Addr().String())
 		}}})
 	if err != nil {
@@ -312,9 +333,10 @@ func TestEgressRefusedAtLoad(t *testing.T) {
 		extra string
 		ok    bool
 	}{
-		"no identity": {``, false},
-		"no audience": {`,"require_identity":true`, false},
-		"complete":    {`,"require_identity":true,"allowed":["group:g"]`, true},
+		"no identity":     {``, false},
+		"no audience":     {`,"require_identity":true`, false},
+		"complete":        {`,"require_identity":true,"allowed":["group:g"]`, true},
+		"stored wildcard": {`,"require_identity":true,"allowed":["group:g"],"egress":["*.example.org:443"]`, false},
 	} {
 		p := filepath.Join(dir, strings.ReplaceAll(name, " ", "-")+".json")
 		if err := os.WriteFile(p, []byte(state(tc.extra)), 0o600); err != nil {
@@ -717,6 +739,112 @@ func TestEgressKickEndsStreams(t *testing.T) {
 		t.Fatal("the outside socket of a kicked session is still open")
 	}
 	eventually(t, "released", func() bool { return x.state().Counters.ActiveStreams == 0 })
+}
+
+// A kick must end every stream of the session, not only the first: one
+// agent serves them all.
+func TestEgressKickEndsEveryStream(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{})
+	_, ep := x.person("ann")
+	resolve(t, ep, "api.example.org")
+	for i := 0; i < 3; i++ {
+		c, err := dialTLS(t, ep, apiIP, "api.example.org")
+		if err != nil {
+			t.Fatal(err)
+		}
+		echo(t, c, "alive")
+	}
+	if err := x.r.KickSession(x.class.Id, "ann"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		select {
+		case <-x.closed:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("outside socket %d of a kicked session is still open", i)
+		}
+	}
+}
+
+// A dial that returns after its stream was killed must not leave an open
+// outside socket behind.
+func TestEgressDialFinishingAfterKick(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{})
+	_, ep := x.person("ann")
+	resolve(t, ep, "api.example.org")
+	release := make(chan struct{})
+	x.hold.Store(&release)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if c, err := dialRaw(t, ep, apiIP, 443); err == nil {
+			c.Close()
+		}
+	}()
+	eventually(t, "the dial started", func() bool { return x.dialed.Load() == 1 })
+	if err := x.r.KickSession(x.class.Id, "ann"); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	select {
+	case <-x.closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the outside socket of a killed stream stayed open")
+	}
+	<-done
+}
+
+// The upload side of the day's allowance, with a server that never answers:
+// the stream ends long before the 200 kB are through.
+func TestEgressDayLimitOnUpload(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{SessionBytesPerDay: 8000})
+	x.mode.Store(modeSink)
+	_, ep := x.person("ann")
+	resolve(t, ep, "api.example.org")
+	c, err := dialTLS(t, ep, apiIP, "api.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetDeadline(time.Now().Add(5 * time.Second))
+	chunk := make([]byte, 1000)
+	for i := 0; i < 200; i++ {
+		if _, err := c.Write(chunk); err != nil {
+			break
+		}
+	}
+	eventually(t, "the stream was released", func() bool { return x.state().Counters.ActiveStreams == 0 })
+	if got := x.rawIn.Load(); got > 30000 {
+		t.Fatalf("%d bytes reached the outside through an 8 kB day", got)
+	}
+	if x.state().Counters.DeniedLimit == 0 {
+		t.Fatal("the limit was not counted")
+	}
+}
+
+// The download side: the outside floods, the guest receives about the day's
+// allowance and no more.
+func TestEgressDayLimitOnDownload(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{SessionBytesPerDay: 8000})
+	x.mode.Store(modeFlood)
+	_, ep := x.person("ann")
+	resolve(t, ep, "api.example.org")
+	c, err := dialTLS(t, ep, apiIP, "api.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetDeadline(time.Now().Add(5 * time.Second))
+	n, _ := io.Copy(io.Discard, c)
+	if n >= 30000 {
+		t.Fatalf("the guest received %d bytes through an 8 kB day", n)
+	}
+	eventually(t, "the limit was counted", func() bool { return x.state().Counters.DeniedLimit > 0 })
+}
+
+func TestEgressStateUnknownClass(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{})
+	if _, err := x.r.EgressState("no-such-class"); relay.ErrKind(err) != relay.KindNotFound {
+		t.Fatalf("got %v", err)
+	}
 }
 
 func TestEgressRotationEndsStreamsAndForgetsPins(t *testing.T) {

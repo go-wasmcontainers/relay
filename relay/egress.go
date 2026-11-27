@@ -449,12 +449,10 @@ func (e *egressClass) lookup(s *egressSess, name string) []netip.Addr {
 	return addrs
 }
 
-// isClassName reports whether name is for the class's own DNS (a container
-// name or an IP literal), which never goes outside.
+// isClassName reports whether name is for the class's own DNS, which never
+// goes outside. (An IP literal is answered by the class's own resolver, so it
+// never reaches the gateway, and would be refused there as not allowlisted.)
 func (c *class) isClassName(name string) bool {
 	name = strings.TrimSuffix(strings.ToLower(name), ".")
-	if _, err := netip.ParseAddr(name); err == nil {
-		return true
-	}
 	return strings.HasSuffix(name, "."+c.s.DNSDomain)
 }
