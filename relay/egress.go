@@ -180,10 +180,8 @@ func newEgressClass(c *class) (*egressClass, error) {
 		res = netResolver{}
 	}
 	extra := append([]netip.Prefix{c.net}, cfg.Deny...)
-	gw, err := egress.NewGateway(al, res, extra)
-	if err != nil {
-		return nil, err
-	}
+	// al is non-empty and res is set here, which is all NewGateway checks.
+	gw := &egress.Gateway{Allow: al, Resolver: res, Now: time.Now, Extra: slices.Clone(extra)}
 	lim := cfg.Limits.withDefaults()
 	e := &egressClass{r: c.r, c: c, gw: gw, lim: lim, dial: cfg.Dial,
 		bytes: newBucket(lim.ClassBytesPerSecond, lim.ClassBytesPerSecond, time.Now),

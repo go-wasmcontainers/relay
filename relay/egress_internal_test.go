@@ -4,12 +4,15 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/netip"
 	"testing"
 	"time"
 
 	"github.com/go-wasmcontainers/relay/auth"
+	"github.com/go-wasmcontainers/relay/firewall"
+	v1 "github.com/go-wasmcontainers/relay/gen/relayv1"
 )
 
 // agentEnv is a relay with one egress class and an agent for one session, with
@@ -56,7 +59,54 @@ func newAgentEnv(t *testing.T, lim EgressLimits) *agentEnv {
 
 type nopResolver struct{}
 
-func (nopResolver) LookupAddrs(context.Context, string) ([]netip.Addr, error) { return nil, nil }
+func (nopResolver) LookupAddrs(context.Context, string) ([]netip.Addr, error) {
+	return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+}
+
+// With every ephemeral port of the source address taken, a connection to an
+// allowed name is refused as a limit, and no link is made.
+func TestConnectEgressNoEphemeralPortLeft(t *testing.T) {
+	x := newAgentEnv(t, EgressLimits{})
+	src := netip.MustParseAddr("10.0.0.9")
+	r := x.e.r
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, err := x.e.gw.Resolve(context.Background(), x.s.pins, "api.example.org"); err != nil {
+		t.Fatal(err)
+	}
+	for p := 49152; p <= 65535; p++ {
+		x.e.c.listeners[lkey{src, firewall.TCP, uint16(p)}] = &listener{}
+	}
+	cn := &conn{r: r, c: x.e.c, session: "s1", streams: map[uint32]*end{}}
+	var got v1.Code
+	refuse := func(c v1.Code, msg string) error { got = c; return errors.New(msg) }
+	err := cn.connectEgress(1, &v1.Connect{PortId: "p", DstPort: 443}, netip.MustParseAddr("93.184.216.34"), src, refuse)
+	if err == nil || got != v1.Code_CODE_LIMIT {
+		t.Fatalf("got %v, code %v; want a limit refusal", err, got)
+	}
+	if len(cn.streams) != 0 {
+		t.Fatalf("%d streams made without a source port", len(cn.streams))
+	}
+}
+
+// The agent ends when its pipe dies, instead of reading nothing forever.
+func TestAgentStopsWhenPipeDies(t *testing.T) {
+	x := newAgentEnv(t, EgressLimits{})
+	_ = x.ag.t.Close("test")
+	eventually(t, "the agent stopped", func() bool {
+		x.ag.mu.Lock()
+		defer x.ag.mu.Unlock()
+		return x.ag.stopped
+	})
+}
+
+// A class without egress tells its members so.
+func TestNilEgressClassProto(t *testing.T) {
+	var e *egressClass
+	if p := e.proto().Policy; p != "none" {
+		t.Fatalf("policy %q for a class without egress", p)
+	}
+}
 
 // stream registers an expected stream and has the agent accept it.
 func (x *agentEnv) stream(t *testing.T, id uint32) *estream {
