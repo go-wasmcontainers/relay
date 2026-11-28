@@ -337,6 +337,10 @@ func TestEgressDeniedRefreshKeepsEgressCut(t *testing.T) {
 	if x.dialed.Load() != 0 {
 		t.Fatal("the gateway dialled for a cut session")
 	}
+	// The connect was refused for the cut, not for a missing pin.
+	if got := x.state().Counters.LastDeniedReason; got != "the session's refresh was denied" {
+		t.Fatalf("last denial: %q", got)
+	}
 	// A successful refresh gives it back.
 	if _, err := x.r.Refresh(j.Token, id); err != nil {
 		t.Fatal(err)
