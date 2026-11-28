@@ -4,7 +4,9 @@ package relay
 
 import (
 	"context"
+	"net"
 	"net/netip"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -157,5 +159,39 @@ func TestGuestDisconnectStopsItsAgent(t *testing.T) {
 	r.mu.Unlock()
 	if left != nil {
 		t.Fatal("the session still points at the agent")
+	}
+}
+
+// cwConn counts the half-closes it is given.
+type cwConn struct {
+	net.Conn
+	closeWrites atomic.Int32
+}
+
+func (c *cwConn) Close() error      { return nil }
+func (c *cwConn) CloseWrite() error { c.closeWrites.Add(1); return nil }
+
+// A stream that was killed with the guest's CLOSE still queued half-closes
+// nothing: the loop ends with the stream, whatever is left in its queue.
+func TestKilledStreamDoesNotHalfCloseFromItsQueue(t *testing.T) {
+	x := newAgentEnv(t, EgressLimits{})
+	s := x.stream(t, 23)
+	s.checked.Store(true)
+	nc := &cwConn{}
+	s.nc = nc
+	s.enqueueClose()
+	s.kill()
+	done := make(chan struct{})
+	go func() { s.writeLoop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the write loop of a killed stream did not end")
+	}
+	if n := nc.closeWrites.Load(); n != 0 {
+		t.Fatalf("a killed stream half-closed the outside socket %d times", n)
+	}
+	if s.guestEOF.Load() {
+		t.Fatal("a killed stream recorded the guest's EOF")
 	}
 }
