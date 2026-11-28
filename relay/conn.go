@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/go-wasmcontainers/relay/auth"
+	"github.com/go-wasmcontainers/relay/egress"
 	"github.com/go-wasmcontainers/relay/firewall"
 	"github.com/go-wasmcontainers/relay/frame"
 	v1 "github.com/go-wasmcontainers/relay/gen/relayv1"
@@ -76,6 +77,7 @@ type link struct {
 	closed       [2]atomic.Bool
 	gone         atomic.Bool
 	egress, ingr string
+	eg           *egressLink // set when b is the egress agent, not a container
 	timer        *time.Timer
 	opened       time.Time
 }
@@ -137,7 +139,10 @@ func (r *Relay) Serve(ctx context.Context, t Transport, claims auth.Claims) erro
 		Limits: &v1.Limits{MaxStreams: uint32(lim.MaxStreams), MaxListeners: uint32(lim.MaxListeners),
 			MaxPorts: uint32(lim.MaxPorts), StreamWindow: lim.StreamWindow, MaxPayload: frame.MaxPayload,
 			BytesPerSecond: uint64(lim.BytesPerSecond), FramesPerSecond: uint32(lim.FramesPerSecond)}}
+	eg := c.eg
 	r.mu.Unlock()
+	// The egress state needs no relay lock, so it is built outside it.
+	welcome.Egress = eg.proto()
 	if old != nil {
 		old.goAway(v1.Code_CODE_RESET, "replaced by a newer connection of the same session")
 	}
@@ -305,6 +310,14 @@ func (cn *conn) shutdown(reason string) {
 		}
 		if c.conns[cn.session] == cn {
 			delete(c.conns, cn.session)
+			// The guest is gone (not replaced by a reconnect): so is the
+			// agent that served its outside streams.
+			if c.eg != nil {
+				c.eg.guestGone(cn.session)
+			}
+		}
+		if c.eg != nil {
+			c.eg.agentGone(cn)
 		}
 		r.mu.Unlock()
 	})
@@ -547,12 +560,44 @@ func (cn *conn) resolve(id uint32, m *v1.Resolve) {
 	if s != nil {
 		addrs = cn.c.resolve(s, m.Name)
 	}
-	r.mu.Unlock()
-	out := &v1.Resolved{}
-	for _, a := range addrs {
-		out.Ips = append(out.Ips, a.String())
+	var es *egressSess
+	var flow firewall.Flow
+	if s != nil && len(addrs) == 0 && cn.c.eg != nil && !cn.c.eg.cut[cn.session] && !cn.c.isClassName(m.Name) {
+		es = cn.c.eg.session(cn.session)
+		var src netip.Addr
+		if p := cn.ownPort(m.PortId); p != nil {
+			src = cn.c.portAddr(p)
+		}
+		flow = firewall.Flow{Protocol: firewall.UDP, Src: netip.AddrPortFrom(src, 0), Dst: netip.AddrPortFrom(netip.IPv4Unspecified(), 53)}
 	}
-	cn.sendMsg(frame.TypeResolved, id, out)
+	r.mu.Unlock()
+	reply := func(addrs []netip.Addr) {
+		out := &v1.Resolved{}
+		if es != nil && len(addrs) > 0 {
+			// An outside answer is a pin, and a pin lapses.
+			out.TtlSeconds = uint32(egress.PinTTL / time.Second)
+		}
+		for _, a := range addrs {
+			out.Ips = append(out.Ips, a.String())
+		}
+		cn.sendMsg(frame.TypeResolved, id, out)
+	}
+	if es != nil {
+		// The one outside lookup: an allowlisted name, off the read loop. A
+		// refusal is a flow event (the name cleaned), not a broadcast.
+		go func() {
+			addrs, why := cn.c.eg.lookup(es, m.Name)
+			if why != "" {
+				r.mu.Lock()
+				cn.c.logFlow(flow, m.PortId, "", v1.Verdict_VERDICT_DENY,
+					firewall.Decision{Reason: "egress lookup of \"" + cleanLabel(egress.Normalize(m.Name), 64) + "\" refused: " + cleanLabel(why, 200)}, 0, 0)
+				r.mu.Unlock()
+			}
+			reply(addrs)
+		}()
+		return
+	}
+	reply(addrs)
 }
 
 // ------------------------------------------------------------------ streams
@@ -590,7 +635,7 @@ func (cn *conn) connect(id uint32, m *v1.Connect) error {
 	srcAddr := c.portAddr(p)
 	dstPortID, ok := c.byAddr[dst]
 	if !ok {
-		return refuse(v1.Code_CODE_UNREACHABLE, "no container has this address")
+		return cn.connectEgress(id, m, dst, srcAddr, refuse)
 	}
 	srcPort := c.freeEphemeral(m.PortId, srcAddr, firewall.TCP)
 	if srcPort == 0 {
@@ -750,6 +795,9 @@ func (c *class) finish(l *link, verdict v1.Verdict, why string) {
 	delete(l.b.streams, l.bID)
 	l.b.mu.Unlock()
 	delete(c.links, l)
+	if l.eg != nil {
+		c.eg.release(l)
+	}
 	c.logFlow(l.flow, l.aPort, l.bPort, verdict, firewall.Decision{Allowed: verdict != v1.Verdict_VERDICT_REVOKED,
 		EgressRule: l.egress, IngressRule: l.ingr, Reason: why}, l.sent[0].Load(), l.sent[1].Load())
 }
@@ -801,6 +849,9 @@ func (cn *conn) datagram(m *v1.Datagram) {
 	}
 	dstPortID, ok := c.byAddr[dst]
 	if !ok {
+		if c.eg != nil {
+			c.eg.ctr.udp.Add(1) // there is no UDP or QUIC outside the class
+		}
 		return
 	}
 	flow := firewall.Flow{Protocol: firewall.UDP, Src: netip.AddrPortFrom(srcAddr, srcPort), Dst: netip.AddrPortFrom(dst, uint16(m.DstPort))}

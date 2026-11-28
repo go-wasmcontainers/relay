@@ -55,6 +55,10 @@ message Class {
   // older epoch than one it has seen (fencing). A single relay: epoch 1.
   string relay_id = 9;
   uint64 epoch = 10;
+  // Outbound internet: the exact "host:443" destinations containers of this
+  // class may reach through the relay. Empty: no egress. A class with egress
+  // requires identity and a group or audience restriction.
+  repeated string egress = 11;
 }
 
 message Network {
@@ -149,6 +153,7 @@ message CreateClassRequest {
   Template template = 5;
   repeated string allowed = 6;
   bool require_identity = 7;
+  repeated string egress = 8;  // exact host:443 entries; see Class.egress
 }
 message GetClassRequest { string id = 1; }
 message DeleteClassRequest { string id = 1; }
@@ -343,6 +348,46 @@ message Welcome {
   string relay_id = 5;
   uint64 epoch = 6;
   int64 token_expires_unix = 7;
+  // What the network does with traffic to the internet, for the UI to draw.
+  EgressState egress = 8;
+}
+
+// EgressState is the class network's outbound policy as the relay applies it.
+message EgressState {
+  string policy = 1;          // "none" or "gateway"
+  string reason = 2;          // why, for "none"
+  string operator = 3;        // label the relay's operator set; empty if none
+  bool logs = 4;              // destinations are logged by the operator
+  repeated string allowlist = 5;
+  EgressLimits limits = 6;
+  EgressCounters counters = 7;
+}
+
+message EgressLimits {
+  uint32 streams_per_session = 1;
+  double connects_per_second = 2;
+  uint32 connect_burst = 3;
+  uint32 streams_per_destination = 4;
+  uint64 class_bytes_per_second = 5;
+  uint64 session_bytes_per_day = 6;
+  uint32 idle_seconds = 7;
+  uint32 lifetime_seconds = 8;
+  double lookups_per_second = 9;
+}
+
+message EgressCounters {
+  uint64 allowed = 1;
+  uint64 denied_not_allowlisted = 2;
+  uint64 denied_private_range = 3;
+  uint64 denied_tls_name = 4;
+  uint64 denied_limit = 5;
+  uint64 dropped_udp = 6;
+  uint64 bytes_up = 7;
+  uint64 bytes_down = 8;
+  uint32 active_streams = 9;
+  string last_denied_host = 10;  // no payload; the name or address asked for
+  string last_denied_reason = 11;
+  int64 last_denied_unix = 12;
 }
 
 message Limits {
@@ -395,7 +440,14 @@ message Datagram {
 }
 
 message Resolve { string name = 1; string port_id = 2; }
-message Resolved { repeated string ips = 1; }
+message Resolved {
+  repeated string ips = 1;
+  // How long the answer may be used, in seconds; 0 when it is an in-class
+  // answer, which lasts as long as the member does. For an outside name it is
+  // how long the relay keeps the address pinned to the name: connect before it
+  // ends, or resolve again.
+  uint32 ttl_seconds = 2;
+}
 
 enum Code {
   CODE_OK = 0;

@@ -34,6 +34,8 @@ type class struct {
 	subs     map[*subscriber]struct{}
 	denySeen map[flowKey]time.Time // last deny logged per UDP flow
 	edges    map[edgeKey]*edgeStat // the flow map's counters
+
+	eg *egressClass // nil: no outbound access
 }
 
 type lkey struct {
@@ -75,6 +77,9 @@ func newClass(r *Relay, sc *sClass) (*class, error) {
 		c.byAddr[c.portAddr(p)] = id
 	}
 	if err := c.compile(); err != nil {
+		return nil, err
+	}
+	if c.eg, err = newEgressClass(c); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -156,7 +161,8 @@ func (c *class) allConns() []*conn {
 
 func (c *class) proto(withCode bool) *v1.Class {
 	pc := &v1.Class{Id: c.s.ID, Name: c.s.Name, Network: c.networkProto(), Template: v1.Template(c.s.Template),
-		CreatedUnix: c.s.Created, RequireIdentity: c.s.RequireID, RelayId: c.r.cfg.RelayID, Epoch: c.s.Epoch}
+		CreatedUnix: c.s.Created, RequireIdentity: c.s.RequireID, RelayId: c.r.cfg.RelayID, Epoch: c.s.Epoch,
+		Egress: slices.Clone(c.s.Egress)}
 	if withCode {
 		pc.JoinCode = c.s.JoinCode
 		pc.Allowed = slices.Clone(c.s.Allowed)

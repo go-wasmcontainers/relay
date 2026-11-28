@@ -327,8 +327,12 @@ type Class struct {
 	// Which relay holds the class, and the lease epoch it holds it under. One
 	// relay holds a class at a time; a client refuses a relay that shows an
 	// older epoch than one it has seen (fencing). A single relay: epoch 1.
-	RelayId       string `protobuf:"bytes,9,opt,name=relay_id,json=relayId,proto3" json:"relay_id,omitempty"`
-	Epoch         uint64 `protobuf:"varint,10,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	RelayId string `protobuf:"bytes,9,opt,name=relay_id,json=relayId,proto3" json:"relay_id,omitempty"`
+	Epoch   uint64 `protobuf:"varint,10,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	// Outbound internet: the exact "host:443" destinations containers of this
+	// class may reach through the relay. Empty: no egress. A class with egress
+	// requires identity and a group or audience restriction.
+	Egress        []string `protobuf:"bytes,11,rep,name=egress,proto3" json:"egress,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -431,6 +435,13 @@ func (x *Class) GetEpoch() uint64 {
 		return x.Epoch
 	}
 	return 0
+}
+
+func (x *Class) GetEgress() []string {
+	if x != nil {
+		return x.Egress
+	}
+	return nil
 }
 
 type Network struct {
@@ -1099,6 +1110,7 @@ type CreateClassRequest struct {
 	Template        Template               `protobuf:"varint,5,opt,name=template,proto3,enum=wasmcontainers.relay.v1.Template" json:"template,omitempty"`
 	Allowed         []string               `protobuf:"bytes,6,rep,name=allowed,proto3" json:"allowed,omitempty"`
 	RequireIdentity bool                   `protobuf:"varint,7,opt,name=require_identity,json=requireIdentity,proto3" json:"require_identity,omitempty"`
+	Egress          []string               `protobuf:"bytes,8,rep,name=egress,proto3" json:"egress,omitempty"` // exact host:443 entries; see Class.egress
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1180,6 +1192,13 @@ func (x *CreateClassRequest) GetRequireIdentity() bool {
 		return x.RequireIdentity
 	}
 	return false
+}
+
+func (x *CreateClassRequest) GetEgress() []string {
+	if x != nil {
+		return x.Egress
+	}
+	return nil
 }
 
 type GetClassRequest struct {
@@ -3165,8 +3184,10 @@ type Welcome struct {
 	RelayId          string `protobuf:"bytes,5,opt,name=relay_id,json=relayId,proto3" json:"relay_id,omitempty"`
 	Epoch            uint64 `protobuf:"varint,6,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	TokenExpiresUnix int64  `protobuf:"varint,7,opt,name=token_expires_unix,json=tokenExpiresUnix,proto3" json:"token_expires_unix,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// What the network does with traffic to the internet, for the UI to draw.
+	Egress        *EgressState `protobuf:"bytes,8,opt,name=egress,proto3" json:"egress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Welcome) Reset() {
@@ -3248,6 +3269,346 @@ func (x *Welcome) GetTokenExpiresUnix() int64 {
 	return 0
 }
 
+func (x *Welcome) GetEgress() *EgressState {
+	if x != nil {
+		return x.Egress
+	}
+	return nil
+}
+
+// EgressState is the class network's outbound policy as the relay applies it.
+type EgressState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        string                 `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`     // "none" or "gateway"
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`     // why, for "none"
+	Operator      string                 `protobuf:"bytes,3,opt,name=operator,proto3" json:"operator,omitempty"` // label the relay's operator set; empty if none
+	Logs          bool                   `protobuf:"varint,4,opt,name=logs,proto3" json:"logs,omitempty"`        // destinations are logged by the operator
+	Allowlist     []string               `protobuf:"bytes,5,rep,name=allowlist,proto3" json:"allowlist,omitempty"`
+	Limits        *EgressLimits          `protobuf:"bytes,6,opt,name=limits,proto3" json:"limits,omitempty"`
+	Counters      *EgressCounters        `protobuf:"bytes,7,opt,name=counters,proto3" json:"counters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EgressState) Reset() {
+	*x = EgressState{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EgressState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EgressState) ProtoMessage() {}
+
+func (x *EgressState) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EgressState.ProtoReflect.Descriptor instead.
+func (*EgressState) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *EgressState) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
+}
+
+func (x *EgressState) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *EgressState) GetOperator() string {
+	if x != nil {
+		return x.Operator
+	}
+	return ""
+}
+
+func (x *EgressState) GetLogs() bool {
+	if x != nil {
+		return x.Logs
+	}
+	return false
+}
+
+func (x *EgressState) GetAllowlist() []string {
+	if x != nil {
+		return x.Allowlist
+	}
+	return nil
+}
+
+func (x *EgressState) GetLimits() *EgressLimits {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+func (x *EgressState) GetCounters() *EgressCounters {
+	if x != nil {
+		return x.Counters
+	}
+	return nil
+}
+
+type EgressLimits struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	StreamsPerSession     uint32                 `protobuf:"varint,1,opt,name=streams_per_session,json=streamsPerSession,proto3" json:"streams_per_session,omitempty"`
+	ConnectsPerSecond     float64                `protobuf:"fixed64,2,opt,name=connects_per_second,json=connectsPerSecond,proto3" json:"connects_per_second,omitempty"`
+	ConnectBurst          uint32                 `protobuf:"varint,3,opt,name=connect_burst,json=connectBurst,proto3" json:"connect_burst,omitempty"`
+	StreamsPerDestination uint32                 `protobuf:"varint,4,opt,name=streams_per_destination,json=streamsPerDestination,proto3" json:"streams_per_destination,omitempty"`
+	ClassBytesPerSecond   uint64                 `protobuf:"varint,5,opt,name=class_bytes_per_second,json=classBytesPerSecond,proto3" json:"class_bytes_per_second,omitempty"`
+	SessionBytesPerDay    uint64                 `protobuf:"varint,6,opt,name=session_bytes_per_day,json=sessionBytesPerDay,proto3" json:"session_bytes_per_day,omitempty"`
+	IdleSeconds           uint32                 `protobuf:"varint,7,opt,name=idle_seconds,json=idleSeconds,proto3" json:"idle_seconds,omitempty"`
+	LifetimeSeconds       uint32                 `protobuf:"varint,8,opt,name=lifetime_seconds,json=lifetimeSeconds,proto3" json:"lifetime_seconds,omitempty"`
+	LookupsPerSecond      float64                `protobuf:"fixed64,9,opt,name=lookups_per_second,json=lookupsPerSecond,proto3" json:"lookups_per_second,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *EgressLimits) Reset() {
+	*x = EgressLimits{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EgressLimits) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EgressLimits) ProtoMessage() {}
+
+func (x *EgressLimits) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EgressLimits.ProtoReflect.Descriptor instead.
+func (*EgressLimits) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *EgressLimits) GetStreamsPerSession() uint32 {
+	if x != nil {
+		return x.StreamsPerSession
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetConnectsPerSecond() float64 {
+	if x != nil {
+		return x.ConnectsPerSecond
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetConnectBurst() uint32 {
+	if x != nil {
+		return x.ConnectBurst
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetStreamsPerDestination() uint32 {
+	if x != nil {
+		return x.StreamsPerDestination
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetClassBytesPerSecond() uint64 {
+	if x != nil {
+		return x.ClassBytesPerSecond
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetSessionBytesPerDay() uint64 {
+	if x != nil {
+		return x.SessionBytesPerDay
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetIdleSeconds() uint32 {
+	if x != nil {
+		return x.IdleSeconds
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetLifetimeSeconds() uint32 {
+	if x != nil {
+		return x.LifetimeSeconds
+	}
+	return 0
+}
+
+func (x *EgressLimits) GetLookupsPerSecond() float64 {
+	if x != nil {
+		return x.LookupsPerSecond
+	}
+	return 0
+}
+
+type EgressCounters struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Allowed              uint64                 `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	DeniedNotAllowlisted uint64                 `protobuf:"varint,2,opt,name=denied_not_allowlisted,json=deniedNotAllowlisted,proto3" json:"denied_not_allowlisted,omitempty"`
+	DeniedPrivateRange   uint64                 `protobuf:"varint,3,opt,name=denied_private_range,json=deniedPrivateRange,proto3" json:"denied_private_range,omitempty"`
+	DeniedTlsName        uint64                 `protobuf:"varint,4,opt,name=denied_tls_name,json=deniedTlsName,proto3" json:"denied_tls_name,omitempty"`
+	DeniedLimit          uint64                 `protobuf:"varint,5,opt,name=denied_limit,json=deniedLimit,proto3" json:"denied_limit,omitempty"`
+	DroppedUdp           uint64                 `protobuf:"varint,6,opt,name=dropped_udp,json=droppedUdp,proto3" json:"dropped_udp,omitempty"`
+	BytesUp              uint64                 `protobuf:"varint,7,opt,name=bytes_up,json=bytesUp,proto3" json:"bytes_up,omitempty"`
+	BytesDown            uint64                 `protobuf:"varint,8,opt,name=bytes_down,json=bytesDown,proto3" json:"bytes_down,omitempty"`
+	ActiveStreams        uint32                 `protobuf:"varint,9,opt,name=active_streams,json=activeStreams,proto3" json:"active_streams,omitempty"`
+	LastDeniedHost       string                 `protobuf:"bytes,10,opt,name=last_denied_host,json=lastDeniedHost,proto3" json:"last_denied_host,omitempty"` // no payload; the name or address asked for
+	LastDeniedReason     string                 `protobuf:"bytes,11,opt,name=last_denied_reason,json=lastDeniedReason,proto3" json:"last_denied_reason,omitempty"`
+	LastDeniedUnix       int64                  `protobuf:"varint,12,opt,name=last_denied_unix,json=lastDeniedUnix,proto3" json:"last_denied_unix,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *EgressCounters) Reset() {
+	*x = EgressCounters{}
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EgressCounters) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EgressCounters) ProtoMessage() {}
+
+func (x *EgressCounters) ProtoReflect() protoreflect.Message {
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EgressCounters.ProtoReflect.Descriptor instead.
+func (*EgressCounters) Descriptor() ([]byte, []int) {
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *EgressCounters) GetAllowed() uint64 {
+	if x != nil {
+		return x.Allowed
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetDeniedNotAllowlisted() uint64 {
+	if x != nil {
+		return x.DeniedNotAllowlisted
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetDeniedPrivateRange() uint64 {
+	if x != nil {
+		return x.DeniedPrivateRange
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetDeniedTlsName() uint64 {
+	if x != nil {
+		return x.DeniedTlsName
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetDeniedLimit() uint64 {
+	if x != nil {
+		return x.DeniedLimit
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetDroppedUdp() uint64 {
+	if x != nil {
+		return x.DroppedUdp
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetBytesUp() uint64 {
+	if x != nil {
+		return x.BytesUp
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetBytesDown() uint64 {
+	if x != nil {
+		return x.BytesDown
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetActiveStreams() uint32 {
+	if x != nil {
+		return x.ActiveStreams
+	}
+	return 0
+}
+
+func (x *EgressCounters) GetLastDeniedHost() string {
+	if x != nil {
+		return x.LastDeniedHost
+	}
+	return ""
+}
+
+func (x *EgressCounters) GetLastDeniedReason() string {
+	if x != nil {
+		return x.LastDeniedReason
+	}
+	return ""
+}
+
+func (x *EgressCounters) GetLastDeniedUnix() int64 {
+	if x != nil {
+		return x.LastDeniedUnix
+	}
+	return 0
+}
+
 type Limits struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	MaxStreams      uint32                 `protobuf:"varint,1,opt,name=max_streams,json=maxStreams,proto3" json:"max_streams,omitempty"`
@@ -3263,7 +3624,7 @@ type Limits struct {
 
 func (x *Limits) Reset() {
 	*x = Limits{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3275,7 +3636,7 @@ func (x *Limits) String() string {
 func (*Limits) ProtoMessage() {}
 
 func (x *Limits) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[45]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3288,7 +3649,7 @@ func (x *Limits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Limits.ProtoReflect.Descriptor instead.
 func (*Limits) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{45}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *Limits) GetMaxStreams() uint32 {
@@ -3349,7 +3710,7 @@ type Attach struct {
 
 func (x *Attach) Reset() {
 	*x = Attach{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3361,7 +3722,7 @@ func (x *Attach) String() string {
 func (*Attach) ProtoMessage() {}
 
 func (x *Attach) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[46]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3374,7 +3735,7 @@ func (x *Attach) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attach.ProtoReflect.Descriptor instead.
 func (*Attach) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{46}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *Attach) GetContainer() string {
@@ -3393,7 +3754,7 @@ type Attached struct {
 
 func (x *Attached) Reset() {
 	*x = Attached{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3405,7 +3766,7 @@ func (x *Attached) String() string {
 func (*Attached) ProtoMessage() {}
 
 func (x *Attached) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[47]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3418,7 +3779,7 @@ func (x *Attached) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attached.ProtoReflect.Descriptor instead.
 func (*Attached) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{47}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *Attached) GetPort() *Port {
@@ -3437,7 +3798,7 @@ type Detach struct {
 
 func (x *Detach) Reset() {
 	*x = Detach{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3449,7 +3810,7 @@ func (x *Detach) String() string {
 func (*Detach) ProtoMessage() {}
 
 func (x *Detach) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[48]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3462,7 +3823,7 @@ func (x *Detach) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Detach.ProtoReflect.Descriptor instead.
 func (*Detach) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{48}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *Detach) GetPortId() string {
@@ -3483,7 +3844,7 @@ type Listen struct {
 
 func (x *Listen) Reset() {
 	*x = Listen{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3495,7 +3856,7 @@ func (x *Listen) String() string {
 func (*Listen) ProtoMessage() {}
 
 func (x *Listen) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[49]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3508,7 +3869,7 @@ func (x *Listen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Listen.ProtoReflect.Descriptor instead.
 func (*Listen) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{49}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *Listen) GetPortId() string {
@@ -3541,7 +3902,7 @@ type Listening struct {
 
 func (x *Listening) Reset() {
 	*x = Listening{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3553,7 +3914,7 @@ func (x *Listening) String() string {
 func (*Listening) ProtoMessage() {}
 
 func (x *Listening) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[50]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3566,7 +3927,7 @@ func (x *Listening) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Listening.ProtoReflect.Descriptor instead.
 func (*Listening) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{50}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *Listening) GetPort() uint32 {
@@ -3587,7 +3948,7 @@ type Unlisten struct {
 
 func (x *Unlisten) Reset() {
 	*x = Unlisten{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3599,7 +3960,7 @@ func (x *Unlisten) String() string {
 func (*Unlisten) ProtoMessage() {}
 
 func (x *Unlisten) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[51]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3612,7 +3973,7 @@ func (x *Unlisten) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unlisten.ProtoReflect.Descriptor instead.
 func (*Unlisten) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{51}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *Unlisten) GetPortId() string {
@@ -3647,7 +4008,7 @@ type Connect struct {
 
 func (x *Connect) Reset() {
 	*x = Connect{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[52]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3659,7 +4020,7 @@ func (x *Connect) String() string {
 func (*Connect) ProtoMessage() {}
 
 func (x *Connect) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[52]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3672,7 +4033,7 @@ func (x *Connect) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Connect.ProtoReflect.Descriptor instead.
 func (*Connect) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{52}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *Connect) GetPortId() string {
@@ -3709,7 +4070,7 @@ type Incoming struct {
 
 func (x *Incoming) Reset() {
 	*x = Incoming{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[53]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3721,7 +4082,7 @@ func (x *Incoming) String() string {
 func (*Incoming) ProtoMessage() {}
 
 func (x *Incoming) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[53]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3734,7 +4095,7 @@ func (x *Incoming) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Incoming.ProtoReflect.Descriptor instead.
 func (*Incoming) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{53}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *Incoming) GetPortId() string {
@@ -3775,7 +4136,7 @@ type Accepted struct {
 
 func (x *Accepted) Reset() {
 	*x = Accepted{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[54]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3787,7 +4148,7 @@ func (x *Accepted) String() string {
 func (*Accepted) ProtoMessage() {}
 
 func (x *Accepted) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[54]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3800,7 +4161,7 @@ func (x *Accepted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Accepted.ProtoReflect.Descriptor instead.
 func (*Accepted) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{54}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *Accepted) GetSrcIp() string {
@@ -3832,7 +4193,7 @@ type Datagram struct {
 
 func (x *Datagram) Reset() {
 	*x = Datagram{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[55]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3844,7 +4205,7 @@ func (x *Datagram) String() string {
 func (*Datagram) ProtoMessage() {}
 
 func (x *Datagram) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[55]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3857,7 +4218,7 @@ func (x *Datagram) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Datagram.ProtoReflect.Descriptor instead.
 func (*Datagram) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{55}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *Datagram) GetPortId() string {
@@ -3912,7 +4273,7 @@ type Resolve struct {
 
 func (x *Resolve) Reset() {
 	*x = Resolve{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[56]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3924,7 +4285,7 @@ func (x *Resolve) String() string {
 func (*Resolve) ProtoMessage() {}
 
 func (x *Resolve) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[56]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3937,7 +4298,7 @@ func (x *Resolve) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resolve.ProtoReflect.Descriptor instead.
 func (*Resolve) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{56}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *Resolve) GetName() string {
@@ -3955,15 +4316,20 @@ func (x *Resolve) GetPortId() string {
 }
 
 type Resolved struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ips           []string               `protobuf:"bytes,1,rep,name=ips,proto3" json:"ips,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ips   []string               `protobuf:"bytes,1,rep,name=ips,proto3" json:"ips,omitempty"`
+	// How long the answer may be used, in seconds; 0 when it is an in-class
+	// answer, which lasts as long as the member does. For an outside name it is
+	// how long the relay keeps the address pinned to the name: connect before it
+	// ends, or resolve again.
+	TtlSeconds    uint32 `protobuf:"varint,2,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Resolved) Reset() {
 	*x = Resolved{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[57]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3975,7 +4341,7 @@ func (x *Resolved) String() string {
 func (*Resolved) ProtoMessage() {}
 
 func (x *Resolved) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[57]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3988,7 +4354,7 @@ func (x *Resolved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resolved.ProtoReflect.Descriptor instead.
 func (*Resolved) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{57}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *Resolved) GetIps() []string {
@@ -3996,6 +4362,13 @@ func (x *Resolved) GetIps() []string {
 		return x.Ips
 	}
 	return nil
+}
+
+func (x *Resolved) GetTtlSeconds() uint32 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
 }
 
 type Result struct {
@@ -4008,7 +4381,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[58]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4020,7 +4393,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[58]
+	mi := &file_wasmcontainers_relay_v1_relay_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4033,7 +4406,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{58}
+	return file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *Result) GetCode() Code {
@@ -4054,7 +4427,7 @@ var File_wasmcontainers_relay_v1_relay_proto protoreflect.FileDescriptor
 
 const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\n" +
-	"#wasmcontainers/relay/v1/relay.proto\x12\x17wasmcontainers.relay.v1\"\xdc\x02\n" +
+	"#wasmcontainers/relay/v1/relay.proto\x12\x17wasmcontainers.relay.v1\"\xf4\x02\n" +
 	"\x05Class\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
@@ -4066,7 +4439,8 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\x10require_identity\x18\b \x01(\bR\x0frequireIdentity\x12\x19\n" +
 	"\brelay_id\x18\t \x01(\tR\arelayId\x12\x14\n" +
 	"\x05epoch\x18\n" +
-	" \x01(\x04R\x05epoch\"_\n" +
+	" \x01(\x04R\x05epoch\x12\x16\n" +
+	"\x06egress\x18\v \x03(\tR\x06egress\"_\n" +
 	"\aNetwork\x12\x12\n" +
 	"\x04cidr\x18\x01 \x01(\tR\x04cidr\x12!\n" +
 	"\fsession_bits\x18\x02 \x01(\rR\vsessionBits\x12\x1d\n" +
@@ -4130,7 +4504,7 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\x0fingress_rule_id\x18\f \x01(\tR\ringressRuleId\x12\x16\n" +
 	"\x06reason\x18\r \x01(\tR\x06reason\x12\x1b\n" +
 	"\tbytes_out\x18\x0e \x01(\x04R\bbytesOut\x12\x19\n" +
-	"\bbytes_in\x18\x0f \x01(\x04R\abytesIn\"\x82\x02\n" +
+	"\bbytes_in\x18\x0f \x01(\x04R\abytesIn\"\x9a\x02\n" +
 	"\x12CreateClassRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04cidr\x18\x02 \x01(\tR\x04cidr\x12!\n" +
@@ -4139,7 +4513,8 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"dns_domain\x18\x04 \x01(\tR\tdnsDomain\x12=\n" +
 	"\btemplate\x18\x05 \x01(\x0e2!.wasmcontainers.relay.v1.TemplateR\btemplate\x12\x18\n" +
 	"\aallowed\x18\x06 \x03(\tR\aallowed\x12)\n" +
-	"\x10require_identity\x18\a \x01(\bR\x0frequireIdentity\"!\n" +
+	"\x10require_identity\x18\a \x01(\bR\x0frequireIdentity\x12\x16\n" +
+	"\x06egress\x18\b \x03(\tR\x06egress\"!\n" +
 	"\x0fGetClassRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"$\n" +
 	"\x12DeleteClassRequest\x12\x0e\n" +
@@ -4263,7 +4638,7 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\fexpires_unix\x18\x02 \x01(\x03R\vexpiresUnix\"F\n" +
 	"\x05Hello\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12#\n" +
-	"\rsession_token\x18\x02 \x01(\tR\fsessionToken\"\xb3\x02\n" +
+	"\rsession_token\x18\x02 \x01(\tR\fsessionToken\"\xf1\x02\n" +
 	"\aWelcome\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12:\n" +
 	"\asession\x18\x02 \x01(\v2 .wasmcontainers.relay.v1.SessionR\asession\x12:\n" +
@@ -4271,7 +4646,42 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\x06limits\x18\x04 \x01(\v2\x1f.wasmcontainers.relay.v1.LimitsR\x06limits\x12\x19\n" +
 	"\brelay_id\x18\x05 \x01(\tR\arelayId\x12\x14\n" +
 	"\x05epoch\x18\x06 \x01(\x04R\x05epoch\x12,\n" +
-	"\x12token_expires_unix\x18\a \x01(\x03R\x10tokenExpiresUnix\"\x87\x02\n" +
+	"\x12token_expires_unix\x18\a \x01(\x03R\x10tokenExpiresUnix\x12<\n" +
+	"\x06egress\x18\b \x01(\v2$.wasmcontainers.relay.v1.EgressStateR\x06egress\"\x8f\x02\n" +
+	"\vEgressState\x12\x16\n" +
+	"\x06policy\x18\x01 \x01(\tR\x06policy\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x1a\n" +
+	"\boperator\x18\x03 \x01(\tR\boperator\x12\x12\n" +
+	"\x04logs\x18\x04 \x01(\bR\x04logs\x12\x1c\n" +
+	"\tallowlist\x18\x05 \x03(\tR\tallowlist\x12=\n" +
+	"\x06limits\x18\x06 \x01(\v2%.wasmcontainers.relay.v1.EgressLimitsR\x06limits\x12C\n" +
+	"\bcounters\x18\a \x01(\v2'.wasmcontainers.relay.v1.EgressCountersR\bcounters\"\xaf\x03\n" +
+	"\fEgressLimits\x12.\n" +
+	"\x13streams_per_session\x18\x01 \x01(\rR\x11streamsPerSession\x12.\n" +
+	"\x13connects_per_second\x18\x02 \x01(\x01R\x11connectsPerSecond\x12#\n" +
+	"\rconnect_burst\x18\x03 \x01(\rR\fconnectBurst\x126\n" +
+	"\x17streams_per_destination\x18\x04 \x01(\rR\x15streamsPerDestination\x123\n" +
+	"\x16class_bytes_per_second\x18\x05 \x01(\x04R\x13classBytesPerSecond\x121\n" +
+	"\x15session_bytes_per_day\x18\x06 \x01(\x04R\x12sessionBytesPerDay\x12!\n" +
+	"\fidle_seconds\x18\a \x01(\rR\vidleSeconds\x12)\n" +
+	"\x10lifetime_seconds\x18\b \x01(\rR\x0flifetimeSeconds\x12,\n" +
+	"\x12lookups_per_second\x18\t \x01(\x01R\x10lookupsPerSecond\"\xe1\x03\n" +
+	"\x0eEgressCounters\x12\x18\n" +
+	"\aallowed\x18\x01 \x01(\x04R\aallowed\x124\n" +
+	"\x16denied_not_allowlisted\x18\x02 \x01(\x04R\x14deniedNotAllowlisted\x120\n" +
+	"\x14denied_private_range\x18\x03 \x01(\x04R\x12deniedPrivateRange\x12&\n" +
+	"\x0fdenied_tls_name\x18\x04 \x01(\x04R\rdeniedTlsName\x12!\n" +
+	"\fdenied_limit\x18\x05 \x01(\x04R\vdeniedLimit\x12\x1f\n" +
+	"\vdropped_udp\x18\x06 \x01(\x04R\n" +
+	"droppedUdp\x12\x19\n" +
+	"\bbytes_up\x18\a \x01(\x04R\abytesUp\x12\x1d\n" +
+	"\n" +
+	"bytes_down\x18\b \x01(\x04R\tbytesDown\x12%\n" +
+	"\x0eactive_streams\x18\t \x01(\rR\ractiveStreams\x12(\n" +
+	"\x10last_denied_host\x18\n" +
+	" \x01(\tR\x0elastDeniedHost\x12,\n" +
+	"\x12last_denied_reason\x18\v \x01(\tR\x10lastDeniedReason\x12(\n" +
+	"\x10last_denied_unix\x18\f \x01(\x03R\x0elastDeniedUnix\"\x87\x02\n" +
 	"\x06Limits\x12\x1f\n" +
 	"\vmax_streams\x18\x01 \x01(\rR\n" +
 	"maxStreams\x12#\n" +
@@ -4320,9 +4730,11 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\x06src_ip\x18\x06 \x01(\tR\x05srcIp\"6\n" +
 	"\aResolve\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
-	"\aport_id\x18\x02 \x01(\tR\x06portId\"\x1c\n" +
+	"\aport_id\x18\x02 \x01(\tR\x06portId\"=\n" +
 	"\bResolved\x12\x10\n" +
-	"\x03ips\x18\x01 \x03(\tR\x03ips\"U\n" +
+	"\x03ips\x18\x01 \x03(\tR\x03ips\x12\x1f\n" +
+	"\vttl_seconds\x18\x02 \x01(\rR\n" +
+	"ttlSeconds\"U\n" +
 	"\x06Result\x121\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x1d.wasmcontainers.relay.v1.CodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage*S\n" +
@@ -4404,7 +4816,7 @@ func file_wasmcontainers_relay_v1_relay_proto_rawDescGZIP() []byte {
 }
 
 var file_wasmcontainers_relay_v1_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_wasmcontainers_relay_v1_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
+var file_wasmcontainers_relay_v1_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
 var file_wasmcontainers_relay_v1_relay_proto_goTypes = []any{
 	(Direction)(0),                      // 0: wasmcontainers.relay.v1.Direction
 	(Protocol)(0),                       // 1: wasmcontainers.relay.v1.Protocol
@@ -4456,20 +4868,23 @@ var file_wasmcontainers_relay_v1_relay_proto_goTypes = []any{
 	(*FlowMapTicketResponse)(nil),       // 47: wasmcontainers.relay.v1.FlowMapTicketResponse
 	(*Hello)(nil),                       // 48: wasmcontainers.relay.v1.Hello
 	(*Welcome)(nil),                     // 49: wasmcontainers.relay.v1.Welcome
-	(*Limits)(nil),                      // 50: wasmcontainers.relay.v1.Limits
-	(*Attach)(nil),                      // 51: wasmcontainers.relay.v1.Attach
-	(*Attached)(nil),                    // 52: wasmcontainers.relay.v1.Attached
-	(*Detach)(nil),                      // 53: wasmcontainers.relay.v1.Detach
-	(*Listen)(nil),                      // 54: wasmcontainers.relay.v1.Listen
-	(*Listening)(nil),                   // 55: wasmcontainers.relay.v1.Listening
-	(*Unlisten)(nil),                    // 56: wasmcontainers.relay.v1.Unlisten
-	(*Connect)(nil),                     // 57: wasmcontainers.relay.v1.Connect
-	(*Incoming)(nil),                    // 58: wasmcontainers.relay.v1.Incoming
-	(*Accepted)(nil),                    // 59: wasmcontainers.relay.v1.Accepted
-	(*Datagram)(nil),                    // 60: wasmcontainers.relay.v1.Datagram
-	(*Resolve)(nil),                     // 61: wasmcontainers.relay.v1.Resolve
-	(*Resolved)(nil),                    // 62: wasmcontainers.relay.v1.Resolved
-	(*Result)(nil),                      // 63: wasmcontainers.relay.v1.Result
+	(*EgressState)(nil),                 // 50: wasmcontainers.relay.v1.EgressState
+	(*EgressLimits)(nil),                // 51: wasmcontainers.relay.v1.EgressLimits
+	(*EgressCounters)(nil),              // 52: wasmcontainers.relay.v1.EgressCounters
+	(*Limits)(nil),                      // 53: wasmcontainers.relay.v1.Limits
+	(*Attach)(nil),                      // 54: wasmcontainers.relay.v1.Attach
+	(*Attached)(nil),                    // 55: wasmcontainers.relay.v1.Attached
+	(*Detach)(nil),                      // 56: wasmcontainers.relay.v1.Detach
+	(*Listen)(nil),                      // 57: wasmcontainers.relay.v1.Listen
+	(*Listening)(nil),                   // 58: wasmcontainers.relay.v1.Listening
+	(*Unlisten)(nil),                    // 59: wasmcontainers.relay.v1.Unlisten
+	(*Connect)(nil),                     // 60: wasmcontainers.relay.v1.Connect
+	(*Incoming)(nil),                    // 61: wasmcontainers.relay.v1.Incoming
+	(*Accepted)(nil),                    // 62: wasmcontainers.relay.v1.Accepted
+	(*Datagram)(nil),                    // 63: wasmcontainers.relay.v1.Datagram
+	(*Resolve)(nil),                     // 64: wasmcontainers.relay.v1.Resolve
+	(*Resolved)(nil),                    // 65: wasmcontainers.relay.v1.Resolved
+	(*Result)(nil),                      // 66: wasmcontainers.relay.v1.Result
 }
 var file_wasmcontainers_relay_v1_relay_proto_depIdxs = []int32{
 	6,  // 0: wasmcontainers.relay.v1.Class.network:type_name -> wasmcontainers.relay.v1.Network
@@ -4495,58 +4910,61 @@ var file_wasmcontainers_relay_v1_relay_proto_depIdxs = []int32{
 	11, // 20: wasmcontainers.relay.v1.FlowMapUpdate.events:type_name -> wasmcontainers.relay.v1.FlowEvent
 	7,  // 21: wasmcontainers.relay.v1.Welcome.session:type_name -> wasmcontainers.relay.v1.Session
 	6,  // 22: wasmcontainers.relay.v1.Welcome.network:type_name -> wasmcontainers.relay.v1.Network
-	50, // 23: wasmcontainers.relay.v1.Welcome.limits:type_name -> wasmcontainers.relay.v1.Limits
-	8,  // 24: wasmcontainers.relay.v1.Attached.port:type_name -> wasmcontainers.relay.v1.Port
-	1,  // 25: wasmcontainers.relay.v1.Listen.protocol:type_name -> wasmcontainers.relay.v1.Protocol
-	1,  // 26: wasmcontainers.relay.v1.Unlisten.protocol:type_name -> wasmcontainers.relay.v1.Protocol
-	4,  // 27: wasmcontainers.relay.v1.Result.code:type_name -> wasmcontainers.relay.v1.Code
-	12, // 28: wasmcontainers.relay.v1.ClassService.CreateClass:input_type -> wasmcontainers.relay.v1.CreateClassRequest
-	13, // 29: wasmcontainers.relay.v1.ClassService.GetClass:input_type -> wasmcontainers.relay.v1.GetClassRequest
-	14, // 30: wasmcontainers.relay.v1.ClassService.DeleteClass:input_type -> wasmcontainers.relay.v1.DeleteClassRequest
-	16, // 31: wasmcontainers.relay.v1.ClassService.ListClasses:input_type -> wasmcontainers.relay.v1.ListClassesRequest
-	18, // 32: wasmcontainers.relay.v1.ClassService.RotateJoinCode:input_type -> wasmcontainers.relay.v1.RotateJoinCodeRequest
-	19, // 33: wasmcontainers.relay.v1.ClassService.ListSessions:input_type -> wasmcontainers.relay.v1.ListSessionsRequest
-	21, // 34: wasmcontainers.relay.v1.ClassService.KickSession:input_type -> wasmcontainers.relay.v1.KickSessionRequest
-	23, // 35: wasmcontainers.relay.v1.JoinService.Join:input_type -> wasmcontainers.relay.v1.JoinRequest
-	26, // 36: wasmcontainers.relay.v1.JoinService.RefreshSession:input_type -> wasmcontainers.relay.v1.RefreshSessionRequest
-	25, // 37: wasmcontainers.relay.v1.JoinService.TeacherSession:input_type -> wasmcontainers.relay.v1.TeacherSessionRequest
-	28, // 38: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:input_type -> wasmcontainers.relay.v1.ListSecurityGroupsRequest
-	30, // 39: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:input_type -> wasmcontainers.relay.v1.CreateSecurityGroupRequest
-	31, // 40: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:input_type -> wasmcontainers.relay.v1.DeleteSecurityGroupRequest
-	33, // 41: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:input_type -> wasmcontainers.relay.v1.CreateRuleRequest
-	34, // 42: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:input_type -> wasmcontainers.relay.v1.DeleteRuleRequest
-	36, // 43: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:input_type -> wasmcontainers.relay.v1.ExplainFlowRequest
-	37, // 44: wasmcontainers.relay.v1.PortService.ListPorts:input_type -> wasmcontainers.relay.v1.ListPortsRequest
-	39, // 45: wasmcontainers.relay.v1.PortService.UpdatePort:input_type -> wasmcontainers.relay.v1.UpdatePortRequest
-	40, // 46: wasmcontainers.relay.v1.FlowLogService.WatchFlows:input_type -> wasmcontainers.relay.v1.WatchFlowsRequest
-	41, // 47: wasmcontainers.relay.v1.FlowLogService.WatchFlowMap:input_type -> wasmcontainers.relay.v1.WatchFlowMapRequest
-	46, // 48: wasmcontainers.relay.v1.FlowMapService.FlowMapTicket:input_type -> wasmcontainers.relay.v1.FlowMapTicketRequest
-	5,  // 49: wasmcontainers.relay.v1.ClassService.CreateClass:output_type -> wasmcontainers.relay.v1.Class
-	5,  // 50: wasmcontainers.relay.v1.ClassService.GetClass:output_type -> wasmcontainers.relay.v1.Class
-	15, // 51: wasmcontainers.relay.v1.ClassService.DeleteClass:output_type -> wasmcontainers.relay.v1.DeleteClassResponse
-	17, // 52: wasmcontainers.relay.v1.ClassService.ListClasses:output_type -> wasmcontainers.relay.v1.ListClassesResponse
-	5,  // 53: wasmcontainers.relay.v1.ClassService.RotateJoinCode:output_type -> wasmcontainers.relay.v1.Class
-	20, // 54: wasmcontainers.relay.v1.ClassService.ListSessions:output_type -> wasmcontainers.relay.v1.ListSessionsResponse
-	22, // 55: wasmcontainers.relay.v1.ClassService.KickSession:output_type -> wasmcontainers.relay.v1.KickSessionResponse
-	24, // 56: wasmcontainers.relay.v1.JoinService.Join:output_type -> wasmcontainers.relay.v1.JoinResponse
-	27, // 57: wasmcontainers.relay.v1.JoinService.RefreshSession:output_type -> wasmcontainers.relay.v1.RefreshSessionResponse
-	24, // 58: wasmcontainers.relay.v1.JoinService.TeacherSession:output_type -> wasmcontainers.relay.v1.JoinResponse
-	29, // 59: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:output_type -> wasmcontainers.relay.v1.ListSecurityGroupsResponse
-	9,  // 60: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:output_type -> wasmcontainers.relay.v1.SecurityGroup
-	32, // 61: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:output_type -> wasmcontainers.relay.v1.DeleteSecurityGroupResponse
-	10, // 62: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:output_type -> wasmcontainers.relay.v1.SecurityGroupRule
-	35, // 63: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:output_type -> wasmcontainers.relay.v1.DeleteRuleResponse
-	11, // 64: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:output_type -> wasmcontainers.relay.v1.FlowEvent
-	38, // 65: wasmcontainers.relay.v1.PortService.ListPorts:output_type -> wasmcontainers.relay.v1.ListPortsResponse
-	8,  // 66: wasmcontainers.relay.v1.PortService.UpdatePort:output_type -> wasmcontainers.relay.v1.Port
-	11, // 67: wasmcontainers.relay.v1.FlowLogService.WatchFlows:output_type -> wasmcontainers.relay.v1.FlowEvent
-	45, // 68: wasmcontainers.relay.v1.FlowLogService.WatchFlowMap:output_type -> wasmcontainers.relay.v1.FlowMapUpdate
-	47, // 69: wasmcontainers.relay.v1.FlowMapService.FlowMapTicket:output_type -> wasmcontainers.relay.v1.FlowMapTicketResponse
-	49, // [49:70] is the sub-list for method output_type
-	28, // [28:49] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	53, // 23: wasmcontainers.relay.v1.Welcome.limits:type_name -> wasmcontainers.relay.v1.Limits
+	50, // 24: wasmcontainers.relay.v1.Welcome.egress:type_name -> wasmcontainers.relay.v1.EgressState
+	51, // 25: wasmcontainers.relay.v1.EgressState.limits:type_name -> wasmcontainers.relay.v1.EgressLimits
+	52, // 26: wasmcontainers.relay.v1.EgressState.counters:type_name -> wasmcontainers.relay.v1.EgressCounters
+	8,  // 27: wasmcontainers.relay.v1.Attached.port:type_name -> wasmcontainers.relay.v1.Port
+	1,  // 28: wasmcontainers.relay.v1.Listen.protocol:type_name -> wasmcontainers.relay.v1.Protocol
+	1,  // 29: wasmcontainers.relay.v1.Unlisten.protocol:type_name -> wasmcontainers.relay.v1.Protocol
+	4,  // 30: wasmcontainers.relay.v1.Result.code:type_name -> wasmcontainers.relay.v1.Code
+	12, // 31: wasmcontainers.relay.v1.ClassService.CreateClass:input_type -> wasmcontainers.relay.v1.CreateClassRequest
+	13, // 32: wasmcontainers.relay.v1.ClassService.GetClass:input_type -> wasmcontainers.relay.v1.GetClassRequest
+	14, // 33: wasmcontainers.relay.v1.ClassService.DeleteClass:input_type -> wasmcontainers.relay.v1.DeleteClassRequest
+	16, // 34: wasmcontainers.relay.v1.ClassService.ListClasses:input_type -> wasmcontainers.relay.v1.ListClassesRequest
+	18, // 35: wasmcontainers.relay.v1.ClassService.RotateJoinCode:input_type -> wasmcontainers.relay.v1.RotateJoinCodeRequest
+	19, // 36: wasmcontainers.relay.v1.ClassService.ListSessions:input_type -> wasmcontainers.relay.v1.ListSessionsRequest
+	21, // 37: wasmcontainers.relay.v1.ClassService.KickSession:input_type -> wasmcontainers.relay.v1.KickSessionRequest
+	23, // 38: wasmcontainers.relay.v1.JoinService.Join:input_type -> wasmcontainers.relay.v1.JoinRequest
+	26, // 39: wasmcontainers.relay.v1.JoinService.RefreshSession:input_type -> wasmcontainers.relay.v1.RefreshSessionRequest
+	25, // 40: wasmcontainers.relay.v1.JoinService.TeacherSession:input_type -> wasmcontainers.relay.v1.TeacherSessionRequest
+	28, // 41: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:input_type -> wasmcontainers.relay.v1.ListSecurityGroupsRequest
+	30, // 42: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:input_type -> wasmcontainers.relay.v1.CreateSecurityGroupRequest
+	31, // 43: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:input_type -> wasmcontainers.relay.v1.DeleteSecurityGroupRequest
+	33, // 44: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:input_type -> wasmcontainers.relay.v1.CreateRuleRequest
+	34, // 45: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:input_type -> wasmcontainers.relay.v1.DeleteRuleRequest
+	36, // 46: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:input_type -> wasmcontainers.relay.v1.ExplainFlowRequest
+	37, // 47: wasmcontainers.relay.v1.PortService.ListPorts:input_type -> wasmcontainers.relay.v1.ListPortsRequest
+	39, // 48: wasmcontainers.relay.v1.PortService.UpdatePort:input_type -> wasmcontainers.relay.v1.UpdatePortRequest
+	40, // 49: wasmcontainers.relay.v1.FlowLogService.WatchFlows:input_type -> wasmcontainers.relay.v1.WatchFlowsRequest
+	41, // 50: wasmcontainers.relay.v1.FlowLogService.WatchFlowMap:input_type -> wasmcontainers.relay.v1.WatchFlowMapRequest
+	46, // 51: wasmcontainers.relay.v1.FlowMapService.FlowMapTicket:input_type -> wasmcontainers.relay.v1.FlowMapTicketRequest
+	5,  // 52: wasmcontainers.relay.v1.ClassService.CreateClass:output_type -> wasmcontainers.relay.v1.Class
+	5,  // 53: wasmcontainers.relay.v1.ClassService.GetClass:output_type -> wasmcontainers.relay.v1.Class
+	15, // 54: wasmcontainers.relay.v1.ClassService.DeleteClass:output_type -> wasmcontainers.relay.v1.DeleteClassResponse
+	17, // 55: wasmcontainers.relay.v1.ClassService.ListClasses:output_type -> wasmcontainers.relay.v1.ListClassesResponse
+	5,  // 56: wasmcontainers.relay.v1.ClassService.RotateJoinCode:output_type -> wasmcontainers.relay.v1.Class
+	20, // 57: wasmcontainers.relay.v1.ClassService.ListSessions:output_type -> wasmcontainers.relay.v1.ListSessionsResponse
+	22, // 58: wasmcontainers.relay.v1.ClassService.KickSession:output_type -> wasmcontainers.relay.v1.KickSessionResponse
+	24, // 59: wasmcontainers.relay.v1.JoinService.Join:output_type -> wasmcontainers.relay.v1.JoinResponse
+	27, // 60: wasmcontainers.relay.v1.JoinService.RefreshSession:output_type -> wasmcontainers.relay.v1.RefreshSessionResponse
+	24, // 61: wasmcontainers.relay.v1.JoinService.TeacherSession:output_type -> wasmcontainers.relay.v1.JoinResponse
+	29, // 62: wasmcontainers.relay.v1.SecurityGroupService.ListSecurityGroups:output_type -> wasmcontainers.relay.v1.ListSecurityGroupsResponse
+	9,  // 63: wasmcontainers.relay.v1.SecurityGroupService.CreateSecurityGroup:output_type -> wasmcontainers.relay.v1.SecurityGroup
+	32, // 64: wasmcontainers.relay.v1.SecurityGroupService.DeleteSecurityGroup:output_type -> wasmcontainers.relay.v1.DeleteSecurityGroupResponse
+	10, // 65: wasmcontainers.relay.v1.SecurityGroupService.CreateRule:output_type -> wasmcontainers.relay.v1.SecurityGroupRule
+	35, // 66: wasmcontainers.relay.v1.SecurityGroupService.DeleteRule:output_type -> wasmcontainers.relay.v1.DeleteRuleResponse
+	11, // 67: wasmcontainers.relay.v1.SecurityGroupService.ExplainFlow:output_type -> wasmcontainers.relay.v1.FlowEvent
+	38, // 68: wasmcontainers.relay.v1.PortService.ListPorts:output_type -> wasmcontainers.relay.v1.ListPortsResponse
+	8,  // 69: wasmcontainers.relay.v1.PortService.UpdatePort:output_type -> wasmcontainers.relay.v1.Port
+	11, // 70: wasmcontainers.relay.v1.FlowLogService.WatchFlows:output_type -> wasmcontainers.relay.v1.FlowEvent
+	45, // 71: wasmcontainers.relay.v1.FlowLogService.WatchFlowMap:output_type -> wasmcontainers.relay.v1.FlowMapUpdate
+	47, // 72: wasmcontainers.relay.v1.FlowMapService.FlowMapTicket:output_type -> wasmcontainers.relay.v1.FlowMapTicketResponse
+	52, // [52:73] is the sub-list for method output_type
+	31, // [31:52] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_wasmcontainers_relay_v1_relay_proto_init() }
@@ -4565,7 +4983,7 @@ func file_wasmcontainers_relay_v1_relay_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wasmcontainers_relay_v1_relay_proto_rawDesc), len(file_wasmcontainers_relay_v1_relay_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   59,
+			NumMessages:   62,
 			NumExtensions: 0,
 			NumServices:   6,
 		},

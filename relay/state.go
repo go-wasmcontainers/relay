@@ -31,6 +31,7 @@ type sClass struct {
 	Template    int                `json:"template"`
 	Allowed     []string           `json:"allowed,omitempty"`
 	RequireID   bool               `json:"require_identity,omitempty"`
+	Egress      []string           `json:"egress,omitempty"` // host:443 allowlist; empty: no outbound access
 	Created     int64              `json:"created"`
 	Epoch       uint64             `json:"epoch"`
 	DefaultSG   string             `json:"default_sg"`

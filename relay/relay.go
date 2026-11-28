@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-wasmcontainers/relay/auth"
+	"github.com/go-wasmcontainers/relay/egress"
 	"github.com/go-wasmcontainers/relay/firewall"
 	v1 "github.com/go-wasmcontainers/relay/gen/relayv1"
 )
@@ -102,6 +103,10 @@ type Config struct {
 	MaxClasses int
 	// Quotas per class (Neutron's security_group and security_group_rule).
 	MaxGroups, MaxRules int
+	// Egress configures outbound internet access for the classes that have
+	// an allowlist (none do unless their creator asked and the class meets
+	// the identity requirements).
+	Egress EgressConfig
 }
 
 // Error is a control-plane error with a kind the API maps to a status.
@@ -233,6 +238,9 @@ type ClassSpec struct {
 	Template    v1.Template
 	Allowed     []string
 	RequireID   bool
+	// Egress is the allowlist of outside "host:443" destinations. It needs
+	// RequireID and a non-empty Allowed; no flag waives either.
+	Egress []string
 }
 
 // CreateClass makes a class with its network, its join code and its default
@@ -265,6 +273,19 @@ func (r *Relay) CreateClass(spec ClassSpec) (*v1.Class, error) {
 			return nil, err
 		}
 	}
+	if spec.Egress != nil {
+		if !spec.RequireID || len(spec.Allowed) == 0 {
+			return nil, errf(KindInvalid, "outbound access needs require-identity and a non-empty allowed list of groups or people; an open class never gets it")
+		}
+		al, err := egress.ParseAllowlist(spec.Egress)
+		if err != nil {
+			return nil, errf(KindInvalid, "%v", err)
+		}
+		spec.Egress = nil
+		for _, d := range al.Hosts() {
+			spec.Egress = append(spec.Egress, d.String())
+		}
+	}
 	code, err := auth.NewJoinCode()
 	if err != nil {
 		return nil, err
@@ -276,7 +297,7 @@ func (r *Relay) CreateClass(spec ClassSpec) (*v1.Class, error) {
 	}
 	sc := &sClass{
 		ID: randomID("c-"), Name: spec.Name, JoinCode: code, CIDR: pfx.String(), SessionBits: spec.SessionBits,
-		DNSDomain: spec.DNSDomain, Template: int(spec.Template), Allowed: spec.Allowed, RequireID: spec.RequireID,
+		DNSDomain: spec.DNSDomain, Template: int(spec.Template), Allowed: spec.Allowed, RequireID: spec.RequireID, Egress: spec.Egress,
 		Created: r.cfg.Now().Unix(), Epoch: 1, Groups: map[string]*sGroup{}, Sessions: map[string]*sSess{}, Ports: map[string]*sPort{},
 	}
 	// The default group, after the template.
@@ -293,6 +314,13 @@ func (r *Relay) CreateClass(spec ClassSpec) (*v1.Class, error) {
 		g.Description = "isolated: no ingress, egress to the teacher's subnet only"
 		g.Rules = []sRule{
 			{ID: sc.newID("r-"), Direction: uint8(firewall.Egress), RemotePrefix: teacherNet.String(), Description: "to the teacher"},
+		}
+		if len(spec.Egress) > 0 {
+			// The class firewall judges the way out too (the gateway applies
+			// its allowlist on top): without this rule, or after an operator
+			// deleted it, nothing leaves.
+			g.Rules = append(g.Rules, sRule{ID: sc.newID("r-"), Direction: uint8(firewall.Egress), Protocol: uint8(firewall.TCP),
+				PortMin: 443, PortMax: 443, Description: "outside, through the egress gateway"})
 		}
 	}
 	sc.Groups[g.ID] = g
@@ -402,6 +430,9 @@ func (r *Relay) DeleteClass(id string) error {
 		return errf(KindNotFound, "no class %s", id)
 	}
 	conns := c.allConns()
+	if c.eg != nil {
+		c.eg.stopAll()
+	}
 	delete(r.classes, id)
 	delete(r.codes, c.s.JoinCode)
 	delete(r.st.Classes, id)
@@ -431,6 +462,11 @@ func (r *Relay) RotateJoinCode(id string) (*v1.Class, error) {
 	delete(r.codes, c.s.JoinCode)
 	c.s.JoinCode = code
 	r.codes[code] = id
+	if c.eg != nil {
+		// Sessions stay, but what the old code opened to the outside does
+		// not: live streams end and every pinned address is forgotten.
+		c.eg.dropAll("the join code was rotated")
+	}
 	if err := r.save(); err != nil {
 		return nil, err
 	}
@@ -592,12 +628,30 @@ func (r *Relay) Refresh(tok string, id *Identity) (*Joined, error) {
 		return nil, errf(KindUnauthenticated, "unauthenticated")
 	}
 	if s.Identity != "" && s.Identity != id.hash() {
+		if c.eg != nil {
+			c.eg.cutSession(s.ID) // a failed refresh cuts outside access too
+		}
 		return nil, errf(KindUnauthenticated, "unauthenticated")
 	}
 	if c.s.RequireID && s.Identity == "" && !s.Teacher {
 		return nil, errf(KindUnauthenticated, "unauthenticated")
 	}
-	return r.issue(c, s)
+	// Join judges who may enter; a refresh judges it again, so a member the
+	// audience no longer names (a group left, an address removed) loses the
+	// session's outside access and cannot renew it: its streams end now, and
+	// its lookups and connects stay refused on this connection until a
+	// refresh succeeds.
+	if !s.Teacher && s.Identity != "" && len(c.s.Allowed) > 0 && (id == nil || !allowed(c.s.Allowed, id)) {
+		if c.eg != nil {
+			c.eg.cutSession(s.ID)
+		}
+		return nil, errf(KindDenied, "this identity is no longer allowed in the class")
+	}
+	out, err := r.issue(c, s)
+	if err == nil && c.eg != nil {
+		delete(c.eg.cut, s.ID)
+	}
+	return out, err
 }
 
 // ListSessions lists a class's sessions.
@@ -635,6 +689,10 @@ func (r *Relay) KickSession(classID, who string) error {
 		if p.Session == s.ID {
 			c.removePort(id)
 		}
+	}
+	if c.eg != nil {
+		c.eg.dropSession(s.ID)
+		delete(c.eg.cut, s.ID)
 	}
 	delete(c.s.Sessions, s.ID)
 	delete(c.conns, s.ID)

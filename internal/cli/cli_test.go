@@ -194,6 +194,21 @@ func TestAcceptance(t *testing.T) {
 	mustRun(t, "class", "delete", id[1], st)
 }
 
+// A junk --egress-deny stops serve before it listens: an operator who typed a
+// deny prefix wrongly must not run a relay without it.
+func TestServeRefusesAJunkEgressDeny(t *testing.T) {
+	sd := filepath.Join(shortDir(t), "s")
+	st := "--state-dir=" + sd
+	mustRun(t, "init", st, "--name", "localhost", "--ip", "127.0.0.1")
+	// Bounded: were the junk value accepted, serve would run until the context ends.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := run(t, ctx, "serve", st, "--listen", "127.0.0.1:0", "--tls", "internal", "--egress-deny", "10.0.0.0/33")
+	if err == nil || !strings.Contains(err.Error(), "egress-deny") {
+		t.Fatalf("serve with a junk --egress-deny: %v", err)
+	}
+}
+
 func TestRefusals(t *testing.T) {
 	sd := filepath.Join(shortDir(t), "s")
 	ctx := context.Background()
@@ -211,6 +226,11 @@ func TestRefusals(t *testing.T) {
 	}
 	if _, err := run(t, ctx, "teacher-session", "--state-dir="+sd); err == nil {
 		t.Fatal("teacher-session without --out")
+	}
+	// An explicit empty --egress is an error, never "everything" and never
+	// "nothing" quietly.
+	if _, err := run(t, ctx, "class", "create", "x", "--egress=", "--state-dir="+sd); err == nil || !strings.Contains(err.Error(), "--egress needs at least one") {
+		t.Fatalf("empty --egress: %v", err)
 	}
 	out, err := run(t, ctx, "version")
 	if err != nil || !strings.Contains(out, "wctr-relay") {

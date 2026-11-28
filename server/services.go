@@ -87,7 +87,8 @@ func (sv *services) CreateClass(ctx context.Context, r *v1.CreateClassRequest) (
 		return nil, connect.NewError(connect.CodeFailedPrecondition, "require_identity needs an OpenID Connect issuer (--oidc-issuer)")
 	}
 	c, err := sv.s.cfg.Relay.CreateClass(relay.ClassSpec{Name: r.Name, CIDR: r.Cidr, SessionBits: int(r.SessionBits),
-		DNSDomain: r.DnsDomain, Template: r.Template, Allowed: r.Allowed, RequireID: r.RequireIdentity})
+		DNSDomain: r.DnsDomain, Template: r.Template, Allowed: r.Allowed, RequireID: r.RequireIdentity,
+		Egress: r.Egress})
 	return c, cerr(err)
 }
 

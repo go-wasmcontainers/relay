@@ -180,6 +180,21 @@ func newBucket(rate, burst float64, now func() time.Time) *bucket {
 	return &bucket{rate: rate, burst: burst, tokens: burst, last: now(), now: now}
 }
 
+// take removes n tokens if they are there and reports whether it did; it
+// never blocks. It is how a rate is enforced by refusing, not by slowing.
+func (b *bucket) take(n float64) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	t := b.now()
+	b.tokens = math.Min(b.burst, b.tokens+t.Sub(b.last).Seconds()*b.rate)
+	b.last = t
+	if b.tokens < n {
+		return false
+	}
+	b.tokens -= n
+	return true
+}
+
 func (b *bucket) wait(ctx context.Context, n float64) error {
 	if n > b.burst {
 		n = b.burst

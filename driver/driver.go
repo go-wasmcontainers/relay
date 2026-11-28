@@ -20,6 +20,7 @@ import (
 	"net/netip"
 	"sync"
 	"syscall"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -353,14 +354,23 @@ func (e *Endpoint) Detach() error {
 // Resolve looks a name up: "<container>", "<container>.<student>" or
 // "<container>.<student>.<domain>".
 func (e *Endpoint) Resolve(ctx context.Context, name string) ([]netip.Addr, error) {
+	a, _, err := e.ResolveTTL(ctx, name)
+	return a, err
+}
+
+// ResolveTTL is Resolve that also returns how long the answer may be used: for
+// an outside name, how long the relay keeps the address pinned to it (0 for an
+// in-class name, which lasts as long as the member does).
+func (e *Endpoint) ResolveTTL(ctx context.Context, name string) ([]netip.Addr, time.Duration, error) {
 	f, err := e.s.request(ctx, frame.TypeResolve, &v1.Resolve{Name: name, PortId: e.port.Id})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var m v1.Resolved
 	if err := proto.Unmarshal(f.Payload, &m); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	ttl := time.Duration(m.TtlSeconds) * time.Second
 	var out []netip.Addr
 	for _, s := range m.Ips {
 		if a, err := netip.ParseAddr(s); err == nil {
@@ -368,9 +378,9 @@ func (e *Endpoint) Resolve(ctx context.Context, name string) ([]netip.Addr, erro
 		}
 	}
 	if len(out) == 0 {
-		return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+		return nil, 0, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 	}
-	return out, nil
+	return out, ttl, nil
 }
 
 func protoOf(network string) (v1.Protocol, error) {

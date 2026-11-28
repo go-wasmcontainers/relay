@@ -28,6 +28,7 @@ func classCmd(g *globals) *cobra.Command {
 	var bits uint32
 	var allow []string
 	var requireID bool
+	var egr []string
 	create := &cobra.Command{Use: "create NAME", Short: "Create a class and print its join code", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			t := v1.Template_TEMPLATE_ISOLATED
@@ -38,6 +39,9 @@ func classCmd(g *globals) *cobra.Command {
 			default:
 				return fmt.Errorf("--template %q: isolated or neutron", tmpl)
 			}
+			if cmd.Flags().Changed("egress") && len(egr) == 0 {
+				return errors.New("--egress needs at least one host:443; leave it out for a class with no outbound access")
+			}
 			c, err := g.client()
 			if err != nil {
 				return err
@@ -45,7 +49,7 @@ func classCmd(g *globals) *cobra.Command {
 			ctx, cancel := cmdCtx(cmd)
 			defer cancel()
 			cls, err := c.cls.CreateClass(ctx, &v1.CreateClassRequest{Name: args[0], Cidr: cidr, SessionBits: bits,
-				DnsDomain: domain, Template: t, Allowed: allow, RequireIdentity: requireID})
+				DnsDomain: domain, Template: t, Allowed: allow, RequireIdentity: requireID, Egress: egr})
 			if err != nil {
 				return err
 			}
@@ -59,6 +63,7 @@ func classCmd(g *globals) *cobra.Command {
 	fl.StringVar(&tmpl, "template", "isolated", "default group: isolated (no ingress) or neutron (Neutron's default)")
 	fl.StringSliceVar(&allow, "allow", nil, "who may join with OpenID Connect: sub:<id>, email:<address>, group:<name>")
 	fl.BoolVar(&requireID, "require-identity", false, "joining needs an OpenID Connect sign-in")
+	fl.StringSliceVar(&egr, "egress", nil, "outside destinations members may reach, exact host:443 (needs --require-identity and --allow; no wildcard, no IP, no other port)")
 
 	list := &cobra.Command{Use: "list", Short: "List classes", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
