@@ -117,7 +117,9 @@ Pages playground, must be listed; the admin listener has no CORS);
 [go-authn/oidc](https://github.com/go-authn/oidc)); `--admin-listen` (admin
 API on TCP with TLS); `--session-ttl`; `--audit-retention`;
 `--egress-operator` (the name shown to students as the party that sees their
-outbound destinations; default the relay's ID). The admin API is
+outbound destinations; default the relay's ID); `--egress-deny` (an address or
+prefix, repeatable, that egress never reaches; the relay's own interface,
+`--listen`, `--admin-listen` and `--host` addresses are always denied). The admin API is
 on the state directory's Unix socket (`0600`), or the path given with
 `--admin-socket` (to `serve` and to the CLI alike; a Unix socket path holds
 at most 103 bytes on macOS and 107 on Linux, and a longer one is refused with
@@ -160,12 +162,23 @@ wctr-relay class create lab --require-identity --allow group:students \
   outside, refuses the whole answer if any address is in a deny table
   (loopback, RFC 1918, link-local and the cloud metadata address, CGNAT,
   multicast, reserved, IPv4-embedding IPv6 prefixes, the class's own CIDR),
-  and pins the addresses to that session for 5 minutes. A connection to any
-  other address is refused, so DNS rebinding and IP literals get nowhere.
+  and pins the addresses to that session for 5 minutes (the answer says so in
+  `Resolved.ttl_seconds`; a pin in use is renewed). Two allowlisted names that
+  share an address share the pin. A connection to any other address is
+  refused, so DNS rebinding and IP literals get nowhere. The lookup name is
+  rooted, so a search domain on the relay cannot redirect it.
+- **The class firewall applies.** A destination outside the class is judged
+  as `outside` by the class's security groups: a class whose groups allow no
+  egress to tcp 443 reaches nothing. A new isolated class with an allowlist
+  gets that one rule; delete it and egress stops.
 - **SNI must match.** The first TLS record is buffered (at most 16 KiB) and
-  its server name must equal the pinned name; missing, mismatched, split
-  across records, oversize or non-TLS streams are reset and counted. Nothing
-  of a refused stream reaches the outside.
+  its server name must equal the pinned name; missing, mismatched, duplicate,
+  split across records, oversize or non-TLS streams are reset and counted.
+  Encrypted ClientHello (the `0xfe0d` extension) is refused, because the
+  relay cannot read the name it hides. Nothing of a refused stream reaches
+  the outside, and the outside cannot send the guest a byte before the check
+  passes. A HelloRetryRequest from the outside is refused too (a second
+  ClientHello would carry a name the relay never checked).
 - **TCP only.** UDP and QUIC are dropped and counted. No IPv6 egress, though
   the IPv6 deny table ships and is tested.
 - **Limits**, per session unless stated: 16 concurrent streams, 2 new
@@ -175,8 +188,10 @@ wctr-relay class create lab --require-identity --allow group:students \
   (`CODE_LIMIT`); a policy refusal is `ECONNREFUSED` (`CODE_REFUSED`). A
   refusal after the stream was accepted (an SNI mismatch) shows up as
   `ECONNRESET`.
-- **Ends with the session.** A kick, a join-code rotation or deleting the
-  class closes the live egress streams and forgets the pins.
+- **Ends with the session.** A kick, a join-code rotation, deleting the
+  class, the guest's disconnect, or a refresh that finds the identity no
+  longer allowed closes the live egress streams and forgets the pins. A
+  lookup in flight during a rotation pins nothing.
 - **Logged, and said so.** Destinations are written to the flow log and kept
   for the audit retention (30 days by default). Every student's Welcome
   carries the operator's name, the allowlist, the limits and the counters, so

@@ -21,7 +21,52 @@ var (
 	ErrBadHello   = errors.New("egress: malformed ClientHello")
 	ErrSplitHello = errors.New("egress: a ClientHello split across records is refused")
 	ErrMultiSNI   = errors.New("egress: more than one server name")
+	ErrECH        = errors.New("egress: Encrypted Client Hello is refused")
 )
+
+// extECH is the encrypted_client_hello extension type (draft-ietf-tls-esni).
+// The gateway cannot see the inner name, so a hello carrying it is refused
+// whatever its outer name (decision D4).
+const extECH = 0xfe0d
+
+// hostByte reports whether c may appear in a host_name: letters, digits,
+// hyphen, dot and underscore (RFC 6066 3 wants an ASCII DNS name without a
+// trailing dot; anything else is not a name the allowlist could hold).
+func hostByte(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	}
+	return c == '-' || c == '.' || c == '_'
+}
+
+// helloRetryRandom is the fixed ServerHello.random of a HelloRetryRequest,
+// the SHA-256 of "HelloRetryRequest" (RFC 8446 4.1.3).
+var helloRetryRandom = [32]byte{
+	0xCF, 0x21, 0xAD, 0x74, 0xE5, 0x9A, 0x61, 0x11, 0xBE, 0x1D, 0x8C, 0x02, 0x1E, 0x65, 0xB8, 0x91,
+	0xC2, 0xA2, 0x11, 0x16, 0x7A, 0xBB, 0x8C, 0x5E, 0x07, 0x9E, 0x09, 0xE2, 0xC8, 0xA8, 0x33, 0x9C,
+}
+
+// IsHelloRetryRequest reports whether b, the first bytes the server sent,
+// open with a HelloRetryRequest. A HelloRetryRequest makes the client send a
+// second ClientHello the gateway never saw, so the relay refuses it
+// (decision D4). decided is false while b is too short to tell: the first
+// 43 bytes are needed (record header, handshake header, version, random).
+func IsHelloRetryRequest(b []byte) (hrr, decided bool) {
+	if len(b) == 0 {
+		return false, false
+	}
+	if b[0] != 0x16 {
+		return false, true
+	}
+	if len(b) > 5 && b[5] != 2 {
+		return false, true
+	}
+	if len(b) < 11+32 {
+		return false, false
+	}
+	return string(b[11:11+32]) == string(helloRetryRandom[:]), true
+}
 
 // reader is a sticky-error cursor: after one read past the end every read
 // returns zero and bad stays set, so a parser checks bad once per structure.
@@ -67,10 +112,10 @@ func (r *reader) u24() int {
 // A ClientHello whose handshake message does not fit the first record is
 // refused (ErrSplitHello), as is anything that is not a handshake record
 // (ErrNotTLS), a record over MaxRecord (ErrOversize) and a hello with no
-// server name or two (ErrNoSNI, ErrMultiSNI). A hello using Encrypted Client
-// Hello carries only its outer name, which is what this returns (decision
-// D4: the caller compares it to the pinned name, so ECH is refused when the
-// outer name differs and the inner name is unreachable by design).
+// server name or two (ErrNoSNI, ErrMultiSNI), a repeated extension type (RFC
+// 8446 4.2) and a hello using Encrypted Client Hello (ErrECH, decision D4:
+// the inner name is unreachable by design, so whatever the outer name says
+// proves nothing).
 func ClientHelloSNI(b []byte) (string, error) {
 	if len(b) < 5 {
 		return "", ErrNeedMore
@@ -103,12 +148,25 @@ func ClientHelloSNI(b []byte) (string, error) {
 		return "", ErrBadHello
 	}
 	name := ""
+	// seen holds one bit per extension type: RFC 8446 4.2 forbids two
+	// extensions of one type in a ClientHello.
+	var seen [1 << 13]byte
 	for len(r.b) > 0 {
 		typ := r.u16()
 		xb := r.take(r.u16())
 		if r.bad {
 			return "", ErrBadHello
 		}
+		if typ == extECH {
+			return "", ErrECH
+		}
+		if seen[typ>>3]&(1<<(typ&7)) != 0 {
+			if typ == 0 {
+				return "", ErrMultiSNI
+			}
+			return "", ErrBadHello
+		}
+		seen[typ>>3] |= 1 << (typ & 7)
 		if typ != 0 {
 			continue
 		}
@@ -130,7 +188,7 @@ func ClientHelloSNI(b []byte) (string, error) {
 				return "", ErrMultiSNI
 			}
 			for _, c := range nb {
-				if c <= ' ' || c >= 0x7f {
+				if !hostByte(c) {
 					return "", ErrBadHello
 				}
 			}

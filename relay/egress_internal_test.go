@@ -77,6 +77,7 @@ func TestConnectEgressNoEphemeralPortLeft(t *testing.T) {
 	for p := 49152; p <= 65535; p++ {
 		x.e.c.listeners[lkey{src, firewall.TCP, uint16(p)}] = &listener{}
 	}
+	x.e.c.s.Ports["p"] = &sPort{ID: "p"} // no port security: the firewall lets it through
 	cn := &conn{r: r, c: x.e.c, session: "s1", streams: map[uint32]*end{}}
 	var got v1.Code
 	refuse := func(c v1.Code, msg string) error { got = c; return errors.New(msg) }
@@ -111,7 +112,7 @@ func TestNilEgressClassProto(t *testing.T) {
 // stream registers an expected stream and has the agent accept it.
 func (x *agentEnv) stream(t *testing.T, id uint32) *estream {
 	t.Helper()
-	x.ag.expect(id, expect{ip: netip.MustParseAddr("93.184.216.34"), name: "api.example.org"})
+	x.ag.expect(id, expect{ip: netip.MustParseAddr("93.184.216.34"), names: []string{"api.example.org"}})
 	x.ag.onConnect(id)
 	s := x.ag.stream(id)
 	if s == nil {
@@ -128,7 +129,7 @@ func TestAgentRefusesUnannouncedAndLateConnect(t *testing.T) {
 	if n := len(x.ag.st); n != 0 {
 		t.Fatalf("%d streams after an unannounced CONNECT", n)
 	}
-	x.ag.expect(5, expect{ip: netip.MustParseAddr("93.184.216.34"), name: "api.example.org"})
+	x.ag.expect(5, expect{ip: netip.MustParseAddr("93.184.216.34"), names: []string{"api.example.org"}})
 	x.ag.stop()
 	x.ag.onConnect(5)
 	if n := len(x.ag.st); n != 0 {
@@ -178,7 +179,7 @@ func TestAgentWriteFailureResetsStream(t *testing.T) {
 	s := x.stream(t, 13)
 	s.checked.Store(true)
 	s.nc = failingConn()
-	s.wq <- []byte("data")
+	s.enqueue([]byte("data"))
 	go s.writeLoop()
 	eventually(t, "the stream was reset", s.isDead)
 }
@@ -191,7 +192,7 @@ func TestAgentStopWhileWaitingForRate(t *testing.T) {
 	s.checked.Store(true)
 	s.nc = failingConn()
 	x.e.bytes.take(x.e.bytes.burst) // the bucket is empty: the write must wait
-	s.wq <- []byte("data")
+	s.enqueue([]byte("data"))
 	done := make(chan struct{})
 	go func() { s.writeLoop(); close(done) }()
 	time.Sleep(50 * time.Millisecond)

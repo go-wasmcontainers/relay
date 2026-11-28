@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/go-wasmcontainers/relay/auth"
+	"github.com/go-wasmcontainers/relay/egress"
 	"github.com/go-wasmcontainers/relay/firewall"
 	"github.com/go-wasmcontainers/relay/frame"
 	v1 "github.com/go-wasmcontainers/relay/gen/relayv1"
@@ -309,6 +310,11 @@ func (cn *conn) shutdown(reason string) {
 		}
 		if c.conns[cn.session] == cn {
 			delete(c.conns, cn.session)
+			// The guest is gone (not replaced by a reconnect): so is the
+			// agent that served its outside streams.
+			if c.eg != nil {
+				c.eg.guestGone(cn.session)
+			}
 		}
 		if c.eg != nil {
 			c.eg.agentGone(cn)
@@ -555,20 +561,40 @@ func (cn *conn) resolve(id uint32, m *v1.Resolve) {
 		addrs = cn.c.resolve(s, m.Name)
 	}
 	var es *egressSess
+	var flow firewall.Flow
 	if s != nil && len(addrs) == 0 && cn.c.eg != nil && !cn.c.isClassName(m.Name) {
 		es = cn.c.eg.session(cn.session)
+		var src netip.Addr
+		if p := cn.ownPort(m.PortId); p != nil {
+			src = cn.c.portAddr(p)
+		}
+		flow = firewall.Flow{Protocol: firewall.UDP, Src: netip.AddrPortFrom(src, 0), Dst: netip.AddrPortFrom(netip.IPv4Unspecified(), 53)}
 	}
 	r.mu.Unlock()
 	reply := func(addrs []netip.Addr) {
 		out := &v1.Resolved{}
+		if es != nil && len(addrs) > 0 {
+			// An outside answer is a pin, and a pin lapses.
+			out.TtlSeconds = uint32(egress.PinTTL / time.Second)
+		}
 		for _, a := range addrs {
 			out.Ips = append(out.Ips, a.String())
 		}
 		cn.sendMsg(frame.TypeResolved, id, out)
 	}
 	if es != nil {
-		// The one outside lookup: an allowlisted name, off the read loop.
-		go func() { reply(cn.c.eg.lookup(es, m.Name)) }()
+		// The one outside lookup: an allowlisted name, off the read loop. A
+		// refusal is a flow event (the name cleaned), not a broadcast.
+		go func() {
+			addrs, why := cn.c.eg.lookup(es, m.Name)
+			if why != "" {
+				r.mu.Lock()
+				cn.c.logFlow(flow, m.PortId, "", v1.Verdict_VERDICT_DENY,
+					firewall.Decision{Reason: "egress lookup of \"" + cleanLabel(egress.Normalize(m.Name), 64) + "\" refused: " + cleanLabel(why, 200)}, 0, 0)
+				r.mu.Unlock()
+			}
+			reply(addrs)
+		}()
 		return
 	}
 	reply(addrs)

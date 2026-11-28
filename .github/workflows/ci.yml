@@ -58,6 +58,10 @@ jobs:
           - { target: FuzzParsePortRange, pkg: ./firewall }
           - { target: FuzzParseProtocol, pkg: ./firewall }
           - { target: FuzzServe, pkg: ./relay }
+          - { target: FuzzServeEgress, pkg: ./relay }
+          - { target: FuzzAgentOnData, pkg: ./relay }
+          - { target: FuzzClientHelloSNI, pkg: ./egress }
+          - { target: FuzzParseAllowlist, pkg: ./egress }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

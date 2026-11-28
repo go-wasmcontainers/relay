@@ -125,7 +125,7 @@ type fakeResolver struct {
 
 func (f *fakeResolver) LookupAddrs(_ context.Context, name string) ([]netip.Addr, error) {
 	f.calls = append(f.calls, name)
-	return f.answers[name], f.err
+	return f.answers[strings.TrimSuffix(name, ".")], f.err
 }
 
 func ips(s ...string) []netip.Addr {
@@ -227,8 +227,8 @@ func TestResolvePinsAndAuthorize(t *testing.T) {
 		t.Fatalf("resolve = %v, %v", got, err)
 	}
 	ip := got[0]
-	if name, err := g.Authorize(p, ip, 443); err != nil || name != "api.example.com" {
-		t.Fatalf("authorize = %q, %v", name, err)
+	if names, err := g.Authorize(p, ip, 443); err != nil || len(names) != 1 || names[0] != "api.example.com" {
+		t.Fatalf("authorize = %q, %v", names, err)
 	}
 	// Port 80 is refused, so is any other.
 	for _, port := range []uint16{80, 25, 8443, 0} {
@@ -331,13 +331,16 @@ func TestClientHelloSNI(t *testing.T) {
 	if n, err := ClientHelloSNI(ok); err != nil || n != "api.example.com" {
 		t.Fatalf("sni = %q, %v", n, err)
 	}
-	if err := CheckHello("api.example.com", ok); err != nil {
+	if err := CheckHello([]string{"api.example.com"}, ok); err != nil {
 		t.Fatalf("match: %v", err)
 	}
-	if err := CheckHello("other.example.com", ok); !errors.Is(err, ErrServerName) {
+	if err := CheckHello([]string{"other.example.com"}, ok); !errors.Is(err, ErrServerName) {
 		t.Fatalf("mismatch: %v", err)
 	}
-	if err := CheckHello("api.example.com", hello(sniExt("API.Example.COM"))); err != nil {
+	if err := CheckHello(nil, ok); !errors.Is(err, ErrServerName) {
+		t.Fatalf("no pinned name: %v", err)
+	}
+	if err := CheckHello([]string{"api.example.com"}, hello(sniExt("API.Example.COM"))); err != nil {
 		t.Fatalf("case: %v", err)
 	}
 	// Missing SNI, no extensions at all.
@@ -399,11 +402,10 @@ func TestClientHelloSNI(t *testing.T) {
 	_, _ = ClientHelloSNI(lie)
 }
 
-// ECH shows only an outer name (the public name); it is refused unless that
-// is the pinned name (D4).
+// ECH shows only an outer name (the public name): refused whatever it is (D4).
 func TestECHOuterNameIsRefused(t *testing.T) {
 	ech := hello(sniExt("public.cdn.example"), ext(0xfe0d, make([]byte, 64)))
-	if err := CheckHello("api.example.com", ech); !errors.Is(err, ErrServerName) {
+	if err := CheckHello([]string{"api.example.com"}, ech); !errors.Is(err, ErrECH) {
 		t.Fatalf("ech: %v", err)
 	}
 }
@@ -530,10 +532,10 @@ func TestResolveErrorsPropagate(t *testing.T) {
 }
 
 func TestCheckHelloPropagatesParseErrors(t *testing.T) {
-	if err := CheckHello("api.example.com", []byte("GET / HTTP/1.1\r\n\r\n")); !errors.Is(err, ErrNotTLS) {
+	if err := CheckHello([]string{"api.example.com"}, []byte("GET / HTTP/1.1\r\n\r\n")); !errors.Is(err, ErrNotTLS) {
 		t.Errorf("not tls: %v", err)
 	}
-	if err := CheckHello("api.example.com", []byte{0x16, 3, 1}); !errors.Is(err, ErrNeedMore) {
+	if err := CheckHello([]string{"api.example.com"}, []byte{0x16, 3, 1}); !errors.Is(err, ErrNeedMore) {
 		t.Errorf("short: %v", err)
 	}
 }

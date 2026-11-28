@@ -7,6 +7,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -37,14 +38,23 @@ var (
 )
 
 type fakeDNS struct {
-	mu sync.Mutex
-	m  map[string][]netip.Addr
+	mu   sync.Mutex
+	m    map[string][]netip.Addr
+	last string
+	// hold, when set, is called after the answer is chosen and before it is
+	// returned: a test parks a lookup in flight with it.
+	hold func(name string)
 }
 
 func (f *fakeDNS) LookupAddrs(_ context.Context, name string) ([]netip.Addr, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	a, ok := f.m[name]
+	f.last = name
+	a, ok := f.m[strings.TrimSuffix(name, ".")]
+	hold := f.hold
+	f.mu.Unlock()
+	if hold != nil {
+		hold(name)
+	}
 	if !ok {
 		return nil, errors.New("NXDOMAIN")
 	}
@@ -80,6 +90,18 @@ type egEnv struct {
 	dialed atomic.Int64
 	mode   atomic.Int32 // what the outside server does after the handshake
 	hold   atomic.Pointer[chan struct{}]
+	greet  atomic.Bool // the outside server writes before it is spoken to
+	hrr    atomic.Bool // the outside server answers with a HelloRetryRequest
+}
+
+// helloRetryRequest is a TLS 1.3 ServerHello whose random is the fixed
+// HelloRetryRequest value (RFC 8446 4.1.3).
+func helloRetryRequest() []byte {
+	random := sha256.Sum256([]byte("HelloRetryRequest"))
+	body := append([]byte{3, 3}, random[:]...)
+	body = append(body, 0, 0x13, 0x01, 0, 0, 0) // session id, suite, compression, no extensions
+	hs := append([]byte{2, 0, byte(len(body) >> 8), byte(len(body))}, body...)
+	return append([]byte{0x16, 3, 3, byte(len(hs) >> 8), byte(len(hs))}, hs...)
 }
 
 const (
@@ -88,7 +110,7 @@ const (
 	modeFlood
 )
 
-func testCert(t *testing.T) tls.Certificate {
+func testCert(t testing.TB) tls.Certificate {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -103,7 +125,7 @@ func testCert(t *testing.T) tls.Certificate {
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
 }
 
-func newEgEnv(t *testing.T, lim relay.EgressLimits) *egEnv {
+func newEgEnv(t testing.TB, lim relay.EgressLimits) *egEnv {
 	t.Helper()
 	x := &egEnv{closed: make(chan struct{}, 256), dns: &fakeDNS{m: map[string][]netip.Addr{
 		"api.example.org": {apiIP}, "other.example.org": {otherIP}, "evil.example.org": {netip.MustParseAddr("93.184.216.99")}}}}
@@ -124,6 +146,16 @@ func newEgEnv(t *testing.T, lim relay.EgressLimits) *egEnv {
 			go func() {
 				defer func() { x.closed <- struct{}{} }()
 				defer c.Close()
+				if x.greet.Load() {
+					c.Write([]byte("220 the outside speaks first"))
+				}
+				if x.hrr.Load() {
+					// Answer the first bytes with a HelloRetryRequest.
+					c.Read(make([]byte, 1))
+					c.Write(helloRetryRequest())
+					io.Copy(io.Discard, c)
+					return
+				}
 				tc := tls.Server(countConn{c, &x.rawIn}, cfg)
 				if tc.Handshake() != nil {
 					return
@@ -176,7 +208,7 @@ func (x *egEnv) person(name string) (*driver.Session, *driver.Endpoint) {
 		x.t.Fatal(err)
 	}
 	s := x.connect(j.Token)
-	return s, attach(x.t.(*testing.T), s, "web")
+	return s, attach(x.t, s, "web")
 }
 
 func (x *egEnv) state() *v1.EgressState {

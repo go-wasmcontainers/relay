@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,9 +48,11 @@ type agent struct {
 // expect is what the relay decided about a stream before it asked the agent
 // to open it.
 type expect struct {
-	ip   netip.Addr
-	name string
-	flow firewall.Flow
+	ip netip.Addr
+	// names are the allowlisted names the address was pinned for; the
+	// ClientHello must carry one of them.
+	names []string
+	flow  firewall.Flow
 	// aPort is the guest's port id, for the log.
 	aPort string
 }
@@ -179,8 +182,9 @@ func (a *agent) onConnect(id uint32) {
 		go a.sendResult(frame.TypeRefuse, id, v1.Code_CODE_UNREACHABLE, "no such outside stream")
 		return
 	}
-	s := &estream{a: a, id: id, x: x, wake: make(chan struct{}, 1), wq: make(chan []byte, 256),
+	s := &estream{a: a, id: id, x: x, wake: make(chan struct{}, 1), qwake: make(chan struct{}, 1),
 		done: make(chan struct{}), born: time.Now()}
+	s.ctx, s.cancel = context.WithCancel(a.ctx)
 	s.credit.Store(int64(a.e.r.limits.StreamWindow))
 	s.touch()
 	a.st[id] = s
@@ -230,19 +234,91 @@ type estream struct {
 	x    expect
 	born time.Time
 
-	nc      net.Conn
-	ncMu    sync.Mutex
-	dead    bool
-	done    chan struct{}
-	wq      chan []byte // guest to outside; a nil element is the guest's CLOSE
-	wake    chan struct{}
-	credit  atomic.Int64 // bytes this side may still send to the guest
-	last    atomic.Int64 // unix nanoseconds of the last data
-	checked atomic.Bool  // the ClientHello named the pinned host
+	// ctx ends with the stream: a killed stream's goroutines stop waiting.
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	nc     net.Conn
+	ncMu   sync.Mutex
+	dead   bool
+	done   chan struct{}
+	wake   chan struct{}
+	credit atomic.Int64 // bytes this side may still send to the guest
+	last   atomic.Int64 // unix nanoseconds of the last data
+
+	// checked: the ClientHello named a pinned host. readStarted: the read
+	// loop runs (only after checked, so nothing from the outside reaches the
+	// guest before the hello is judged).
+	checked     atomic.Bool
+	readStarted atomic.Bool
+
+	// The guest-to-outside queue is counted in bytes, like the credit the
+	// guest holds: a guest cannot queue more than the window, however small
+	// its writes. qclose is the guest's CLOSE, after the queued bytes.
+	qmu    sync.Mutex
+	qbuf   []byte
+	qclose bool
+	qwake  chan struct{}
 
 	hello []byte // run goroutine only
 
 	outEOF, guestEOF atomic.Bool
+}
+
+// enqueue queues guest bytes for the outside; false when the queue would
+// exceed the window.
+func (s *estream) enqueue(p []byte) bool {
+	s.qmu.Lock()
+	if len(s.qbuf)+len(p) > int(s.a.e.r.limits.StreamWindow) {
+		s.qmu.Unlock()
+		return false
+	}
+	s.qbuf = append(s.qbuf, p...)
+	s.qmu.Unlock()
+	s.qsignal()
+	return true
+}
+
+func (s *estream) enqueueClose() {
+	s.qmu.Lock()
+	s.qclose = true
+	s.qmu.Unlock()
+	s.qsignal()
+}
+
+func (s *estream) qsignal() {
+	select {
+	case s.qwake <- struct{}{}:
+	default:
+	}
+}
+
+// take waits for the next chunk (at most one frame) or the guest's CLOSE,
+// once the chunks before it were taken. ok is false when the stream ended.
+func (s *estream) take() (chunk []byte, closing, ok bool) {
+	for {
+		s.qmu.Lock()
+		if n := min(len(s.qbuf), frame.MaxPayload); n > 0 {
+			chunk = append([]byte(nil), s.qbuf[:n]...)
+			s.qbuf = s.qbuf[n:]
+			if len(s.qbuf) == 0 {
+				s.qbuf = nil
+			}
+			s.qmu.Unlock()
+			return chunk, false, true
+		}
+		if s.qclose {
+			s.qclose = false
+			s.qmu.Unlock()
+			return nil, true, true
+		}
+		s.qmu.Unlock()
+		select {
+		case <-s.qwake:
+		case <-s.ctx.Done():
+			return nil, false, false
+		}
+	}
 }
 
 func (s *estream) touch() { s.last.Store(time.Now().UnixNano()) }
@@ -257,13 +333,13 @@ func (s *estream) poke() {
 // open dials the pinned literal and answers the relay.
 func (s *estream) open() {
 	a := s.a
-	ctx, cancel := context.WithTimeout(a.ctx, dialTimeout)
+	ctx, cancel := context.WithTimeout(s.ctx, dialTimeout)
 	defer cancel()
 	nc, err := a.e.dial(ctx, s.x.ip, egress.Port)
 	if err != nil {
-		a.forget(s.id)
-		s.kill()
-		a.sendResult(frame.TypeRefuse, s.id, v1.Code_CODE_UNREACHABLE, "the outside host did not answer")
+		if s.kill() {
+			a.sendResult(frame.TypeRefuse, s.id, v1.Code_CODE_UNREACHABLE, "the outside host did not answer")
+		}
 		return
 	}
 	s.ncMu.Lock()
@@ -276,31 +352,48 @@ func (s *estream) open() {
 	s.ncMu.Unlock()
 	a.send(frame.TypeAccept, s.id, nil)
 	go s.writeLoop()
-	go s.readLoop()
+	s.maybeStartRead()
 }
 
-// kill closes the outside socket and forgets the stream. It never talks to
-// the relay.
-func (s *estream) kill() {
+// maybeStartRead starts the read loop once the socket is open and the
+// ClientHello was judged: nothing the outside says reaches the guest before.
+func (s *estream) maybeStartRead() {
+	s.ncMu.Lock()
+	open := s.nc != nil && !s.dead
+	s.ncMu.Unlock()
+	if open && s.checked.Load() && s.readStarted.CompareAndSwap(false, true) {
+		go s.readLoop()
+	}
+}
+
+// kill closes the outside socket and forgets the stream; it reports whether
+// this call ended it. It never talks to the relay.
+func (s *estream) kill() bool {
 	s.ncMu.Lock()
 	if s.dead {
 		s.ncMu.Unlock()
-		return
+		return false
 	}
 	s.dead = true
 	nc := s.nc
 	close(s.done)
 	s.ncMu.Unlock()
+	s.cancel()
 	if nc != nil {
 		_ = nc.Close()
 	}
 	s.a.forget(s.id)
+	return true
 }
 
-// abort resets the stream towards the guest and closes the outside.
+// abort resets the stream towards the guest and closes the outside. The
+// reset is sent from its own goroutine: a stalled pipe must not stop the
+// agent's read loop (which would overflow the relay's queue and take every
+// stream with it).
 func (s *estream) abort(code v1.Code, why string) {
-	s.kill()
-	s.a.sendResult(frame.TypeReset, s.id, code, why)
+	if s.kill() {
+		go s.a.sendResult(frame.TypeReset, s.id, code, why)
+	}
 }
 
 // onData runs on the agent's read goroutine: the first bytes must be a
@@ -312,20 +405,25 @@ func (s *estream) onData(p []byte) {
 	s.touch()
 	if !s.checked.Load() {
 		s.hello = append(s.hello, p...)
-		err := egress.CheckHello(s.x.name, s.hello)
+		err := egress.CheckHello(s.x.names, s.hello)
 		switch {
 		case errors.Is(err, egress.ErrNeedMore) && len(s.hello) <= egress.MaxRecord+5:
 			return
 		case err != nil:
-			s.a.e.deniedTLS(s, err)
+			s.a.e.deniedTLS(s, "TLS server name: "+err.Error())
 			return
 		}
-		s.checked.Store(true)
 		p, s.hello = s.hello, nil
+		if !s.enqueue(p) {
+			s.abort(v1.Code_CODE_LIMIT, "the outside write queue is full")
+			return
+		}
+		// Only now may the outside speak to the guest.
+		s.checked.Store(true)
+		s.maybeStartRead()
+		return
 	}
-	select {
-	case s.wq <- append([]byte(nil), p...):
-	default:
+	if !s.enqueue(p) {
 		s.abort(v1.Code_CODE_LIMIT, "the outside write queue is full")
 	}
 }
@@ -341,27 +439,22 @@ func (s *estream) guestClosed() {
 		s.abort(v1.Code_CODE_RESET, "closed before a TLS ClientHello")
 		return
 	}
-	select {
-	case s.wq <- nil:
-	default:
-		s.abort(v1.Code_CODE_LIMIT, "the outside write queue is full")
-	}
+	s.enqueueClose()
 }
 
 type closeWriter interface{ CloseWrite() error }
 
 // writeLoop sends the guest's bytes outside, under the class rate, and gives
-// the guest its credit back once they are written.
+// the guest its credit back once they are written. It ends with the stream:
+// a killed stream charges nothing and writes nothing more.
 func (s *estream) writeLoop() {
 	a := s.a
 	for {
-		var b []byte
-		select {
-		case b = <-s.wq:
-		case <-s.done:
+		b, closing, ok := s.take()
+		if !ok || s.isDead() {
 			return
 		}
-		if b == nil {
+		if closing {
 			if cw, ok := s.nc.(closeWriter); ok {
 				_ = cw.CloseWrite()
 			}
@@ -369,7 +462,7 @@ func (s *estream) writeLoop() {
 			s.maybeFinish()
 			continue
 		}
-		if a.e.bytes.wait(a.ctx, float64(len(b))) != nil {
+		if a.e.bytes.wait(s.ctx, float64(len(b))) != nil || s.isDead() {
 			return
 		}
 		if !s.account(len(b)) {
@@ -401,6 +494,11 @@ func (s *estream) account(n int) bool {
 func (s *estream) readLoop() {
 	a := s.a
 	buf := make([]byte, frame.MaxPayload)
+	// head holds the first bytes of the outside's answer until they show
+	// whether it is a HelloRetryRequest (a second ClientHello the gateway
+	// would never see: refused, decision D4).
+	var head []byte
+	decided := false
 	for {
 		for s.credit.Load() <= 0 {
 			select {
@@ -417,13 +515,34 @@ func (s *estream) readLoop() {
 				return
 			}
 			s.touch()
-			a.send(frame.TypeData, s.id, buf[:nr])
+			out := buf[:nr]
+			if !decided {
+				head = append(head, out...)
+				hrr, dec := egress.IsHelloRetryRequest(head)
+				if hrr {
+					a.e.deniedTLS(s, "TLS: the outside sent a HelloRetryRequest, whose second ClientHello is not checked")
+					return
+				}
+				if dec {
+					decided, out, head = true, head, nil
+				} else {
+					out = nil
+				}
+			}
+			for len(out) > 0 {
+				k := min(len(out), frame.MaxPayload)
+				a.send(frame.TypeData, s.id, out[:k])
+				out = out[k:]
+			}
 		}
 		if err != nil {
 			select {
 			case <-s.done:
 				return
 			default:
+			}
+			if len(head) > 0 {
+				a.send(frame.TypeData, s.id, head) // the short answer of a server that hung up
 			}
 			a.send(frame.TypeClose, s.id, nil)
 			s.outEOF.Store(true)
@@ -441,13 +560,12 @@ func (s *estream) maybeFinish() {
 }
 
 // deniedTLS refuses a stream whose first bytes did not name the pinned host.
-func (e *egressClass) deniedTLS(s *estream, err error) {
+func (e *egressClass) deniedTLS(s *estream, why string) {
 	e.ctr.tls.Add(1)
-	why := "TLS server name: " + err.Error()
-	e.deny(s.x.name, why)
+	e.deny(s.x.names[0], why)
 	r := e.r
 	r.mu.Lock()
-	e.c.logFlow(s.x.flow, s.x.aPort, "", v1.Verdict_VERDICT_DENY, firewall.Decision{Reason: "egress to " + s.x.name + ": " + why}, 0, 0)
+	e.c.logFlow(s.x.flow, s.x.aPort, "", v1.Verdict_VERDICT_DENY, firewall.Decision{Reason: "egress to " + strings.Join(s.x.names, ",") + ": " + why}, 0, 0)
 	r.mu.Unlock()
 	s.abort(v1.Code_CODE_REFUSED, why)
 }

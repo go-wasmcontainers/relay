@@ -45,6 +45,7 @@ type serveFlags struct {
 	sessionTTL               time.Duration
 	relayID                  string
 	egressOperator           string
+	egressDeny               []string
 }
 
 // serveReady, when set (tests), receives the public listener's address.
@@ -87,6 +88,7 @@ func serveCmd(g *globals) *cobra.Command {
 	fl.DurationVar(&f.auditRetention, "audit-retention", 30*24*time.Hour, "audit log retention")
 	fl.DurationVar(&f.sessionTTL, "session-ttl", 12*time.Hour, "session token lifetime")
 	fl.StringVar(&f.egressOperator, "egress-operator", "", "who runs this relay, shown to members of a class with outbound access (default: the relay id)")
+	fl.StringSliceVar(&f.egressDeny, "egress-deny", nil, "address or prefix an egress class may never reach, besides the built-in table and this machine's own addresses (repeatable)")
 	fl.StringVar(&f.relayID, "relay-id", "", "this relay's id (default: the host name)")
 	return cmd
 }
@@ -187,8 +189,12 @@ func serve(cmd *cobra.Command, g *globals, f *serveFlags) error {
 	if id == "" {
 		id, _ = os.Hostname()
 	}
+	deny, err := egressDeny(f.egressDeny, f.listen, f.adminListen, f.hosts, net.InterfaceAddrs)
+	if err != nil {
+		return err
+	}
 	r, err := relay.New(relay.Config{RelayID: id, Store: relay.FileStore{Path: d.State()}, Keys: keys,
-		SessionTTL: f.sessionTTL, Audit: audit.Write, Egress: relay.EgressConfig{Operator: f.egressOperator}})
+		SessionTTL: f.sessionTTL, Audit: audit.Write, Egress: relay.EgressConfig{Operator: f.egressOperator, Deny: deny}})
 	if err != nil {
 		return err
 	}

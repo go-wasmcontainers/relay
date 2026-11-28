@@ -315,6 +315,13 @@ func (r *Relay) CreateClass(spec ClassSpec) (*v1.Class, error) {
 		g.Rules = []sRule{
 			{ID: sc.newID("r-"), Direction: uint8(firewall.Egress), RemotePrefix: teacherNet.String(), Description: "to the teacher"},
 		}
+		if len(spec.Egress) > 0 {
+			// The class firewall judges the way out too (the gateway applies
+			// its allowlist on top): without this rule, or after an operator
+			// deleted it, nothing leaves.
+			g.Rules = append(g.Rules, sRule{ID: sc.newID("r-"), Direction: uint8(firewall.Egress), Protocol: uint8(firewall.TCP),
+				PortMin: 443, PortMax: 443, Description: "outside, through the egress gateway"})
+		}
 	}
 	sc.Groups[g.ID] = g
 	sc.DefaultSG = g.ID
@@ -625,6 +632,15 @@ func (r *Relay) Refresh(tok string, id *Identity) (*Joined, error) {
 	}
 	if c.s.RequireID && s.Identity == "" && !s.Teacher {
 		return nil, errf(KindUnauthenticated, "unauthenticated")
+	}
+	// Join judges who may enter; a refresh judges it again, so a member the
+	// audience no longer names (a group left, an address removed) loses the
+	// session's outside access at once and cannot renew it.
+	if !s.Teacher && s.Identity != "" && len(c.s.Allowed) > 0 && (id == nil || !allowed(c.s.Allowed, id)) {
+		if c.eg != nil {
+			c.eg.dropSession(s.ID)
+		}
+		return nil, errf(KindDenied, "this identity is no longer allowed in the class")
 	}
 	return r.issue(c, s)
 }

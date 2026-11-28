@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -27,6 +28,7 @@ var (
 	ErrNoAddress      = errors.New("egress: the name has no usable IPv4 address")
 	ErrLimit          = errors.New("egress: limit reached")
 	ErrServerName     = errors.New("egress: the TLS server name is not the allowlisted name")
+	ErrStale          = errors.New("egress: the lookup began before the session's pins were cleared")
 )
 
 // DeniedError is an answer or address refused by the deny table.
@@ -95,7 +97,12 @@ func (g *Gateway) Resolve(ctx context.Context, p *Pins, name string) ([]netip.Ad
 	if !g.Allow.Has(name, Port) {
 		return nil, ErrNotAllowlisted
 	}
-	addrs, err := g.Resolver.LookupAddrs(ctx, name)
+	// The generation is read before the lookup: a Clear while it runs (a
+	// rotated join code, a removed member) makes the answer stale.
+	gen := p.Generation()
+	// Rooted: a relative name would walk the host's resolv.conf search
+	// domains and could answer for another name.
+	addrs, err := g.Resolver.LookupAddrs(ctx, name+".")
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +119,7 @@ func (g *Gateway) Resolve(ctx context.Context, p *Pins, name string) ([]netip.Ad
 		return nil, ErrNoAddress
 	}
 	for _, a := range v4 {
-		if err := p.pin(a, name, g.now()); err != nil {
+		if err := p.pinGen(a, name, g.now(), &gen); err != nil {
 			return nil, err
 		}
 	}
@@ -122,33 +129,41 @@ func (g *Gateway) Resolve(ctx context.Context, p *Pins, name string) ([]netip.Ad
 // Authorize is rule 3 and 5: a CONNECT to an address outside the class is
 // allowed only on port 443 and only for an address this session resolved
 // through the gateway; the address is vetted again. It returns the name the
-// address was pinned for, which the TLS server name must equal.
-func (g *Gateway) Authorize(p *Pins, ip netip.Addr, port uint16) (name string, err error) {
+// address was pinned for (sorted; several allowlisted names may share an
+// address), one of which the TLS server name must equal. Using a pin
+// refreshes it.
+func (g *Gateway) Authorize(p *Pins, ip netip.Addr, port uint16) (names []string, err error) {
 	if port != Port {
-		return "", ErrPort
+		return nil, ErrPort
 	}
 	ip = ip.Unmap()
 	if r := g.deny(ip); r != "" {
-		return "", &DeniedError{Addr: ip, Reason: r}
+		return nil, &DeniedError{Addr: ip, Reason: r}
 	}
-	name, ok := p.lookup(ip, g.now())
-	if !ok {
-		return "", ErrNotPinned
+	pinned := p.lookup(ip, g.now())
+	if len(pinned) == 0 {
+		return nil, ErrNotPinned
 	}
-	if !g.Allow.Has(name, port) {
-		return "", ErrNotAllowlisted
+	for _, n := range pinned {
+		if g.Allow.Has(n, port) {
+			names = append(names, n)
+		}
 	}
-	return name, nil
+	if len(names) == 0 {
+		return nil, ErrNotAllowlisted
+	}
+	return names, nil
 }
 
-// CheckHello is rule D4: the ClientHello in record must name the pinned
-// name. ErrNeedMore means the caller should buffer more of the first record.
-func CheckHello(pinned string, record []byte) error {
+// CheckHello is rule D4: the ClientHello in record must name one of the
+// pinned names. ErrNeedMore means the caller should buffer more of the first
+// record.
+func CheckHello(pinned []string, record []byte) error {
 	sni, err := ClientHelloSNI(record)
 	if err != nil {
 		return err
 	}
-	if Normalize(sni) != pinned {
+	if !slices.Contains(pinned, Normalize(sni)) {
 		return ErrServerName
 	}
 	return nil
@@ -170,58 +185,109 @@ func (g *Gateway) Control(network, address string, _ syscall.RawConn) error {
 	return nil
 }
 
-// Pins is one session's vetted addresses: ip -> (name, expiry), bounded.
+// Pins is one session's vetted addresses: ip -> {name -> expiry}, bounded.
+// Several allowlisted names may share an address (CDNs), so an address holds
+// a set of names; the bound counts (address, name) pairs.
 type Pins struct {
-	mu sync.Mutex
-	m  map[netip.Addr]pin
-}
-
-type pin struct {
-	name    string
-	expires time.Time
+	mu  sync.Mutex
+	m   map[netip.Addr]map[string]time.Time
+	n   int
+	gen uint64
 }
 
 // NewPins returns an empty table.
-func NewPins() *Pins { return &Pins{m: map[netip.Addr]pin{}} }
+func NewPins() *Pins { return &Pins{m: map[netip.Addr]map[string]time.Time{}} }
 
-func (p *Pins) pin(a netip.Addr, name string, now time.Time) error {
+// Generation counts Clear calls. A lookup that began in an earlier
+// generation must not pin: see PinIf.
+func (p *Pins) Generation() uint64 {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if _, ok := p.m[a]; !ok && len(p.m) >= MaxPins {
-		for k, v := range p.m {
-			if !now.Before(v.expires) {
-				delete(p.m, k)
-			}
-		}
-		if len(p.m) >= MaxPins {
+	return p.gen
+}
+
+func (p *Pins) pin(a netip.Addr, name string, now time.Time) error {
+	return p.pinGen(a, name, now, nil)
+}
+
+// pinGen pins unless gen is set and no longer the table's generation.
+func (p *Pins) pinGen(a netip.Addr, name string, now time.Time, gen *uint64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if gen != nil && *gen != p.gen {
+		return ErrStale
+	}
+	names := p.m[a]
+	if _, ok := names[name]; !ok && p.n >= MaxPins {
+		p.sweep(now)
+		if p.n >= MaxPins {
 			return ErrLimit
 		}
+		names = p.m[a]
 	}
-	p.m[a] = pin{name: name, expires: now.Add(PinTTL)}
+	if names == nil {
+		names = map[string]time.Time{}
+		p.m[a] = names
+	}
+	if _, ok := names[name]; !ok {
+		p.n++
+	}
+	names[name] = now.Add(PinTTL)
 	return nil
 }
 
-func (p *Pins) lookup(a netip.Addr, now time.Time) (string, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	v, ok := p.m[a]
-	if !ok || !now.Before(v.expires) {
-		delete(p.m, a)
-		return "", false
+// sweep drops every expired pair. p.mu held.
+func (p *Pins) sweep(now time.Time) {
+	for a, names := range p.m {
+		for n, exp := range names {
+			if !now.Before(exp) {
+				delete(names, n)
+				p.n--
+			}
+		}
+		if len(names) == 0 {
+			delete(p.m, a)
+		}
 	}
-	return v.name, true
 }
 
-// Clear forgets every pin: the session must resolve again.
+// lookup returns the names pinned to a, sorted, and refreshes each one's
+// expiry: a pin lives while the session keeps using the address.
+func (p *Pins) lookup(a netip.Addr, now time.Time) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	names := p.m[a]
+	var out []string
+	for n, exp := range names {
+		if !now.Before(exp) {
+			delete(names, n)
+			p.n--
+			continue
+		}
+		names[n] = now.Add(PinTTL)
+		out = append(out, n)
+	}
+	if len(names) == 0 {
+		delete(p.m, a)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// Clear forgets every pin and starts a new generation: the session must
+// resolve again, and a lookup already in flight cannot pin afterwards.
 func (p *Pins) Clear() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	clear(p.m)
+	p.n = 0
+	p.gen++
 }
 
-// Len is the number of pins held (expired ones included until touched).
+// Len is the number of (address, name) pins held (expired ones included
+// until touched).
 func (p *Pins) Len() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return len(p.m)
+	return p.n
 }

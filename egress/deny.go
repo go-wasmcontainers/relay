@@ -42,8 +42,7 @@ var denied4 = prefixes(
 // address (64:ff9b::/96, 2002::/16, 2001::/32: denied outright in v1) and
 // multicast ff00::/8 (added). ::ffff:0:0/96 is handled by unmapping.
 var denied6 = prefixes(
-	"::/128",         // Unspecified
-	"::1/128",        // Loopback
+	"::/96",          // Unspecified, Loopback and the deprecated IPv4-compatible range (::127.0.0.1)
 	"64:ff9b::/96",   // NAT64, embeds an IPv4 address
 	"64:ff9b:1::/48", // Local-use NAT64
 	"100::/64",       // Discard-Only
@@ -54,6 +53,7 @@ var denied6 = prefixes(
 	"3fff::/20",      // Documentation
 	"5f00::/16",      // SRv6 SIDs
 	"fc00::/7",       // Unique-Local
+	"fec0::/10",      // Site-Local, deprecated (RFC 3879) and not in the registry
 	"fe80::/10",      // Link-Local Unicast
 	"ff00::/8",       // Multicast (added)
 )

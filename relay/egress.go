@@ -155,8 +155,9 @@ func (s *egressSess) overDay(now time.Time, limit uint64) bool {
 // egressLink is what a link to the outside carries.
 type egressLink struct {
 	sess *egressSess
-	name string
-	// destination is the allowlisted name the stream is counted against.
+	// names are the allowlisted names the address was pinned for; the stream
+	// is counted against each of them.
+	names []string
 }
 
 // newEgressClass builds the gateway of a class. It refuses what decision D2
@@ -215,10 +216,35 @@ func (e *egressClass) session(id string) *egressSess {
 	return s
 }
 
+// deny records the last refusal every member is shown. A host is shown only
+// when it is an allowlisted name or an address (which the guest cannot make
+// say anything but itself): a name another member asked for is theirs, and
+// goes to the flow log only.
 func (e *egressClass) deny(host, reason string) {
+	if _, err := netip.ParseAddr(host); err != nil && !e.gw.Allow.Has(host, egress.Port) {
+		host = ""
+	}
 	e.lastMu.Lock()
-	e.last.host, e.last.reason, e.last.unix = host, reason, e.r.cfg.Now().Unix()
+	e.last.host, e.last.reason, e.last.unix = cleanLabel(host, 253), cleanLabel(reason, 200), e.r.cfg.Now().Unix()
 	e.lastMu.Unlock()
+}
+
+// cleanLabel makes a guest-influenced string safe to show or log: printable
+// ASCII only (anything else, and the characters markup uses, becomes '?'),
+// at most max bytes.
+func cleanLabel(s string, max int) string {
+	b := make([]byte, 0, min(len(s), max)+3)
+	for i := 0; i < len(s); i++ {
+		if len(b) >= max {
+			return string(append(b, "..."...))
+		}
+		c := s[i]
+		if c < 0x20 || c >= 0x7f || c == '<' || c == '>' || c == '"' || c == '&' {
+			c = '?'
+		}
+		b = append(b, c)
+	}
+	return string(b)
 }
 
 // proto is the state every member sees: what is allowed, who runs it, what
@@ -302,15 +328,23 @@ func (cn *conn) connectEgress(id uint32, m *v1.Connect, dst, srcAddr netip.Addr,
 	if !s.connect.take(1) {
 		return limited("too many new outside connections; slow down")
 	}
-	name, err := e.gw.Authorize(s.pins, dst, uint16(m.DstPort))
+	// The class firewall judges the outside like any other destination: an
+	// "outside" port with no port security, so the guest's egress rules
+	// decide (a class that removed them has no way out).
+	if d := c.pol.Evaluate(flow, c.fwPort(m.PortId), &firewall.Port{ID: "outside", Addr: dst}); !d.Allowed {
+		e.ctr.notAllowed.Add(1)
+		return denied(v1.Code_CODE_REFUSED, "refused by the firewall: "+d.Reason)
+	}
+	names, err := e.gw.Authorize(s.pins, dst, uint16(m.DstPort))
 	if err != nil {
 		e.count(err)
 		return denied(v1.Code_CODE_REFUSED, err.Error())
 	}
+	name := strings.Join(names, ",")
 	switch {
 	case s.streams >= e.lim.StreamsPerSession:
 		return limited("too many open outside streams for this session")
-	case e.dest[name] >= e.lim.StreamsPerDestination:
+	case e.destFull(names):
 		return limited("too many open streams to " + name + " across the class")
 	case s.overDay(r.cfg.Now(), e.lim.SessionBytesPerDay):
 		return limited("this session used its outside traffic for the day")
@@ -326,7 +360,7 @@ func (cn *conn) connectEgress(id uint32, m *v1.Connect, dst, srcAddr netip.Addr,
 	bid := b.nextID
 	b.nextID += 2
 	lk := &link{c: c, flow: flow, a: cn, b: b, aID: id, bID: bid, aPort: m.PortId, bPort: "", opened: r.cfg.Now(),
-		eg: &egressLink{sess: s, name: name}}
+		eg: &egressLink{sess: s, names: names}}
 	lk.credit[0].Store(int64(r.limits.StreamWindow))
 	lk.credit[1].Store(int64(r.limits.StreamWindow))
 	b.streams[bid] = &end{l: lk, side: 1}
@@ -337,10 +371,12 @@ func (cn *conn) connectEgress(id uint32, m *v1.Connect, dst, srcAddr netip.Addr,
 	cn.mu.Unlock()
 	c.links[lk] = struct{}{}
 	s.streams++
-	e.dest[name]++
+	for _, n := range names {
+		e.dest[n]++
+	}
 	e.ctr.active.Add(1)
 	e.ctr.allowed.Add(1)
-	ag.expect(bid, expect{ip: dst, name: name, flow: flow, aPort: m.PortId})
+	ag.expect(bid, expect{ip: dst, names: names, flow: flow, aPort: m.PortId})
 	lk.timer = time.AfterFunc(connectTimeout, func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -354,12 +390,25 @@ func (cn *conn) connectEgress(id uint32, m *v1.Connect, dst, srcAddr netip.Addr,
 	return nil
 }
 
+// destFull reports whether a new stream would take any of the names over the
+// per-destination bound. Relay.mu held.
+func (e *egressClass) destFull(names []string) bool {
+	for _, n := range names {
+		if e.dest[n] >= e.lim.StreamsPerDestination {
+			return true
+		}
+	}
+	return false
+}
+
 // release gives back what a finished egress link held. Relay.mu held.
 func (e *egressClass) release(l *link) {
 	el := l.eg
 	el.sess.streams--
-	if e.dest[el.name]--; e.dest[el.name] <= 0 {
-		delete(e.dest, el.name)
+	for _, n := range el.names {
+		if e.dest[n]--; e.dest[n] <= 0 {
+			delete(e.dest, n)
+		}
 	}
 	e.ctr.active.Add(-1)
 	e.ctr.up.Add(l.sent[0].Load())
@@ -408,6 +457,15 @@ func (e *egressClass) stopAll() {
 	}
 }
 
+// guestGone stops the agent of a session whose last connection ended.
+// Relay.mu held.
+func (e *egressClass) guestGone(session string) {
+	if s := e.sess[session]; s != nil && s.agent != nil {
+		go s.agent.stop()
+		s.agent = nil
+	}
+}
+
 // agentGone forgets an agent whose connection ended. Relay.mu held.
 func (e *egressClass) agentGone(cn *conn) {
 	for _, s := range e.sess {
@@ -420,18 +478,21 @@ func (e *egressClass) agentGone(cn *conn) {
 
 // lookup answers a guest's name lookup for an allowlisted name: the only
 // outside DNS the relay does (threat model rule 1), rate limited per session.
-// It does not hold Relay.mu.
-func (e *egressClass) lookup(s *egressSess, name string) []netip.Addr {
+// It does not hold Relay.mu. A refusal comes back as why (non-empty) for the
+// caller to put in the flow log, which needs the lock.
+func (e *egressClass) lookup(s *egressSess, name string) (addrs []netip.Addr, why string) {
 	name = egress.Normalize(name)
+	refuse := func(reason string) ([]netip.Addr, string) {
+		e.deny(name, reason)
+		return nil, reason
+	}
 	if !e.gw.Allow.Has(name, egress.Port) {
 		e.ctr.notAllowed.Add(1)
-		e.deny(name, "not allowlisted")
-		return nil
+		return refuse("not allowlisted")
 	}
 	if !s.lookup.take(1) {
 		e.ctr.limit.Add(1)
-		e.deny(name, "too many outside lookups")
-		return nil
+		return refuse("too many outside lookups")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -441,10 +502,9 @@ func (e *egressClass) lookup(s *egressSess, name string) []netip.Addr {
 		if errors.As(err, &de) {
 			e.ctr.private.Add(1)
 		}
-		e.deny(name, err.Error())
-		return nil
+		return refuse(err.Error())
 	}
-	return addrs
+	return addrs, ""
 }
 
 // isClassName reports whether name is for the class's own DNS, which never

@@ -80,13 +80,13 @@ func (e *env) connect(token string) *driver.Session {
 	return s
 }
 
-func ctx(t *testing.T) context.Context {
+func ctx(t testing.TB) context.Context {
 	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 	return c
 }
 
-func attach(t *testing.T, s *driver.Session, name string) *driver.Endpoint {
+func attach(t testing.TB, s *driver.Session, name string) *driver.Endpoint {
 	t.Helper()
 	ep, err := s.Attach(ctx(t), name)
 	if err != nil {

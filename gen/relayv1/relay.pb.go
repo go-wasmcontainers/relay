@@ -4316,8 +4316,13 @@ func (x *Resolve) GetPortId() string {
 }
 
 type Resolved struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ips           []string               `protobuf:"bytes,1,rep,name=ips,proto3" json:"ips,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ips   []string               `protobuf:"bytes,1,rep,name=ips,proto3" json:"ips,omitempty"`
+	// How long the answer may be used, in seconds; 0 when it is an in-class
+	// answer, which lasts as long as the member does. For an outside name it is
+	// how long the relay keeps the address pinned to the name: connect before it
+	// ends, or resolve again.
+	TtlSeconds    uint32 `protobuf:"varint,2,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4357,6 +4362,13 @@ func (x *Resolved) GetIps() []string {
 		return x.Ips
 	}
 	return nil
+}
+
+func (x *Resolved) GetTtlSeconds() uint32 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
 }
 
 type Result struct {
@@ -4718,9 +4730,11 @@ const file_wasmcontainers_relay_v1_relay_proto_rawDesc = "" +
 	"\x06src_ip\x18\x06 \x01(\tR\x05srcIp\"6\n" +
 	"\aResolve\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
-	"\aport_id\x18\x02 \x01(\tR\x06portId\"\x1c\n" +
+	"\aport_id\x18\x02 \x01(\tR\x06portId\"=\n" +
 	"\bResolved\x12\x10\n" +
-	"\x03ips\x18\x01 \x03(\tR\x03ips\"U\n" +
+	"\x03ips\x18\x01 \x03(\tR\x03ips\x12\x1f\n" +
+	"\vttl_seconds\x18\x02 \x01(\rR\n" +
+	"ttlSeconds\"U\n" +
 	"\x06Result\x121\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x1d.wasmcontainers.relay.v1.CodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage*S\n" +

@@ -440,7 +440,14 @@ message Datagram {
 }
 
 message Resolve { string name = 1; string port_id = 2; }
-message Resolved { repeated string ips = 1; }
+message Resolved {
+  repeated string ips = 1;
+  // How long the answer may be used, in seconds; 0 when it is an in-class
+  // answer, which lasts as long as the member does. For an outside name it is
+  // how long the relay keeps the address pinned to the name: connect before it
+  // ends, or resolve again.
+  uint32 ttl_seconds = 2;
+}
 
 enum Code {
   CODE_OK = 0;
