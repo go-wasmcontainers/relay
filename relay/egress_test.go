@@ -92,6 +92,7 @@ type egEnv struct {
 	hold   atomic.Pointer[chan struct{}]
 	greet  atomic.Bool // the outside server writes before it is spoken to
 	hrr    atomic.Bool // the outside server answers with a HelloRetryRequest
+	noDial atomic.Bool // the relay's dial to the outside fails
 }
 
 // helloRetryRequest is a TLS 1.3 ServerHello whose random is the fixed
@@ -179,6 +180,9 @@ func newEgEnv(t testing.TB, lim relay.EgressLimits) *egEnv {
 	r, err := relay.New(relay.Config{Keys: k, Egress: relay.EgressConfig{Resolver: x.dns, Limits: lim, Operator: "test operator",
 		Dial: func(ctx context.Context, ip netip.Addr, port uint16) (net.Conn, error) {
 			x.dialed.Add(1)
+			if x.noDial.Load() {
+				return nil, errors.New("no route to the outside")
+			}
 			if h := x.hold.Load(); h != nil {
 				<-*h // deliberately ignores ctx: a dial that returns after the stream was killed
 			}
@@ -577,6 +581,7 @@ func TestEgressSplitHelloIsReassembled(t *testing.T) {
 		t.Fatal(err)
 	}
 	tc := tls.Client(chunkConn{c, 7}, &tls.Config{ServerName: "api.example.org", InsecureSkipVerify: true})
+	c.SetDeadline(time.Now().Add(5 * time.Second))
 	if err := tc.Handshake(); err != nil {
 		t.Fatal(err)
 	}
@@ -802,6 +807,24 @@ func TestEgressKickEndsEveryStream(t *testing.T) {
 	// One agent served the three streams, and it is gone: nothing of the
 	// session is left running.
 	eventually(t, "the session's goroutines ended", func() bool { return runtime.NumGoroutine() <= base+1 })
+}
+
+// An outside host that does not answer is a refusal the guest can read, and
+// no accept comes before it.
+func TestEgressUnreachableOutsideHost(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{})
+	_, ep := x.person("ann")
+	resolve(t, ep, "api.example.org")
+	x.noDial.Store(true)
+	c, err := dialRaw(t, ep, apiIP, 443)
+	if err == nil {
+		c.Close()
+		t.Fatal("a dial to an unreachable outside host was accepted")
+	}
+	wantErrno(t, err, syscall.ECONNREFUSED) // the relay answers the guest in its own words
+	if x.dialed.Load() != 1 {
+		t.Fatalf("dialed %d times", x.dialed.Load())
+	}
 }
 
 // A dial that returns after its stream was killed must not leave an open

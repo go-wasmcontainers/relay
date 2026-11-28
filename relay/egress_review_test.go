@@ -285,7 +285,12 @@ func TestEgressLookupInFlightDuringRotation(t *testing.T) {
 		defer close(done)
 		resolve(t, ep, "api.example.org")
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("the lookup never reached the resolver")
+	}
 	if _, err := x.r.RotateJoinCode(x.class.Id); err != nil {
 		t.Fatal(err)
 	}

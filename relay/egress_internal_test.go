@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
@@ -240,4 +241,23 @@ func eventually(t *testing.T, what string, f func() bool) {
 		}
 	}
 	t.Fatalf("timed out: %s", what)
+}
+
+// A guest-chosen label is cut to its cap and carries no markup.
+func TestCleanLabel(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"abc", 3, "abc"},
+		{"abcd", 3, "abc..."},
+		{strings.Repeat("a", 100), 10, "aaaaaaaaaa..."},
+		{"a<b>\"&\x00\xff", 20, "a?b???" + "??"},
+		{"", 5, ""},
+	} {
+		if got := cleanLabel(c.in, c.max); got != c.want {
+			t.Errorf("cleanLabel(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
+	}
 }
