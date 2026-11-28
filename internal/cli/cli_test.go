@@ -200,7 +200,10 @@ func TestServeRefusesAJunkEgressDeny(t *testing.T) {
 	sd := filepath.Join(shortDir(t), "s")
 	st := "--state-dir=" + sd
 	mustRun(t, "init", st, "--name", "localhost", "--ip", "127.0.0.1")
-	_, err := run(t, context.Background(), "serve", st, "--listen", "127.0.0.1:0", "--tls", "internal", "--egress-deny", "10.0.0.0/33")
+	// Bounded: were the junk value accepted, serve would run until the context ends.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := run(t, ctx, "serve", st, "--listen", "127.0.0.1:0", "--tls", "internal", "--egress-deny", "10.0.0.0/33")
 	if err == nil || !strings.Contains(err.Error(), "egress-deny") {
 		t.Fatalf("serve with a junk --egress-deny: %v", err)
 	}
