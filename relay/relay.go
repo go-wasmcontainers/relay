@@ -628,6 +628,9 @@ func (r *Relay) Refresh(tok string, id *Identity) (*Joined, error) {
 		return nil, errf(KindUnauthenticated, "unauthenticated")
 	}
 	if s.Identity != "" && s.Identity != id.hash() {
+		if c.eg != nil {
+			c.eg.cutSession(s.ID) // a failed refresh cuts outside access too
+		}
 		return nil, errf(KindUnauthenticated, "unauthenticated")
 	}
 	if c.s.RequireID && s.Identity == "" && !s.Teacher {
@@ -635,14 +638,20 @@ func (r *Relay) Refresh(tok string, id *Identity) (*Joined, error) {
 	}
 	// Join judges who may enter; a refresh judges it again, so a member the
 	// audience no longer names (a group left, an address removed) loses the
-	// session's outside access at once and cannot renew it.
+	// session's outside access and cannot renew it: its streams end now, and
+	// its lookups and connects stay refused on this connection until a
+	// refresh succeeds.
 	if !s.Teacher && s.Identity != "" && len(c.s.Allowed) > 0 && (id == nil || !allowed(c.s.Allowed, id)) {
 		if c.eg != nil {
-			c.eg.dropSession(s.ID)
+			c.eg.cutSession(s.ID)
 		}
 		return nil, errf(KindDenied, "this identity is no longer allowed in the class")
 	}
-	return r.issue(c, s)
+	out, err := r.issue(c, s)
+	if err == nil && c.eg != nil {
+		delete(c.eg.cut, s.ID)
+	}
+	return out, err
 }
 
 // ListSessions lists a class's sessions.
@@ -683,6 +692,7 @@ func (r *Relay) KickSession(classID, who string) error {
 	}
 	if c.eg != nil {
 		c.eg.dropSession(s.ID)
+		delete(c.eg.cut, s.ID)
 	}
 	delete(c.s.Sessions, s.ID)
 	delete(c.conns, s.ID)

@@ -308,3 +308,65 @@ func TestEgressLookupInFlightDuringRotation(t *testing.T) {
 		t.Fatal("dialled")
 	}
 }
+
+// A denied refresh cuts outside access on the live connection and keeps it
+// cut: the same token resolves and connects no more until a refresh succeeds.
+func TestEgressDeniedRefreshKeepsEgressCut(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{})
+	id := &relay.Identity{Issuer: "https://idp", Subject: "ann", Groups: []string{"students"}}
+	j, err := x.r.Join(x.class.JoinCode, "ann", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := attach(t, x.connect(j.Token), "web")
+	resolve(t, ep, "api.example.org")
+	left := &relay.Identity{Issuer: "https://idp", Subject: "ann", Groups: []string{"alumni"}}
+	if _, err := x.r.Refresh(j.Token, left); relay.ErrKind(err) != relay.KindDenied {
+		t.Fatalf("refresh after leaving the group: %v", err)
+	}
+	eventually(t, "the streams are cut", func() bool { return x.state().Counters.ActiveStreams == 0 })
+	if got := resolve(t, ep, "api.example.org"); len(got) != 0 {
+		t.Fatalf("a cut session resolved an outside name: %v", got)
+	}
+	if c, err := dialRaw(t, ep, apiIP, 443); err == nil {
+		c.Close()
+		t.Fatal("a cut session connected outside")
+	} else {
+		wantErrno(t, err, syscall.ECONNREFUSED)
+	}
+	if x.dialed.Load() != 0 {
+		t.Fatal("the gateway dialled for a cut session")
+	}
+	// A successful refresh gives it back.
+	if _, err := x.r.Refresh(j.Token, id); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolve(t, ep, "api.example.org"); len(got) == 0 {
+		t.Fatal("a refreshed session cannot resolve")
+	}
+	c, err := dialTLS(t, ep, apiIP, "api.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	echo(t, c, "after the refresh")
+	c.Close()
+}
+
+// A refresh with another identity fails and cuts the session as well.
+func TestEgressFailedRefreshWithOtherIdentityCuts(t *testing.T) {
+	x := newEgEnv(t, relay.EgressLimits{})
+	id := &relay.Identity{Issuer: "https://idp", Subject: "ann", Groups: []string{"students"}}
+	j, err := x.r.Join(x.class.JoinCode, "ann", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep := attach(t, x.connect(j.Token), "web")
+	resolve(t, ep, "api.example.org")
+	other := &relay.Identity{Issuer: "https://idp", Subject: "bob", Groups: []string{"students"}}
+	if _, err := x.r.Refresh(j.Token, other); err == nil {
+		t.Fatal("refresh with another identity")
+	}
+	if got := resolve(t, ep, "api.example.org"); len(got) != 0 {
+		t.Fatalf("a cut session resolved: %v", got)
+	}
+}

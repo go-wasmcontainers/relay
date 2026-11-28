@@ -29,9 +29,11 @@ func TestKilledStreamWriteLoopDoesNotLinger(t *testing.T) {
 	go func() { s.writeLoop(); close(done) }()
 	time.Sleep(50 * time.Millisecond)
 	s.kill()
+	// The wait for the rate is capped near a second, so a loop that waited on
+	// the agent's context instead would still end, but not within this.
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(300 * time.Millisecond):
 		t.Fatal("the write loop of a killed stream is still waiting")
 	}
 	if d := x.s.day; d != 0 {

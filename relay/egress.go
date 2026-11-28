@@ -103,6 +103,7 @@ type egressClass struct {
 	allow  []string
 	bytes  *bucket
 	sess   map[string]*egressSess
+	cut    map[string]bool // sessions whose refresh was denied: no egress until one succeeds
 	dest   map[string]int
 	ctr    egressCounters
 	lastMu sync.Mutex
@@ -186,7 +187,7 @@ func newEgressClass(c *class) (*egressClass, error) {
 	lim := cfg.Limits.withDefaults()
 	e := &egressClass{r: c.r, c: c, gw: gw, lim: lim, dial: cfg.Dial,
 		bytes: newBucket(lim.ClassBytesPerSecond, lim.ClassBytesPerSecond, time.Now),
-		sess:  map[string]*egressSess{}, dest: map[string]int{}}
+		sess:  map[string]*egressSess{}, cut: map[string]bool{}, dest: map[string]int{}}
 	if e.dial == nil {
 		d := &net.Dialer{Timeout: dialTimeout, Control: gw.Control}
 		e.dial = func(ctx context.Context, ip netip.Addr, port uint16) (net.Conn, error) {
@@ -314,13 +315,16 @@ func (cn *conn) connectEgress(id uint32, m *v1.Connect, dst, srcAddr netip.Addr,
 		return refuse(v1.Code_CODE_UNREACHABLE, "no container has this address")
 	}
 	r := cn.r
-	s := e.session(cn.session)
 	flow := firewall.Flow{Protocol: firewall.TCP, Src: netip.AddrPortFrom(srcAddr, 0), Dst: netip.AddrPortFrom(dst, uint16(m.DstPort))}
 	denied := func(code v1.Code, why string) error {
 		e.deny(dst.String(), why)
 		c.logFlow(flow, m.PortId, "", v1.Verdict_VERDICT_DENY, firewall.Decision{Reason: "egress: " + why}, 0, 0)
 		return refuse(code, "egress refused: "+why)
 	}
+	if e.cut[cn.session] {
+		return denied(v1.Code_CODE_REFUSED, "the session's refresh was denied")
+	}
+	s := e.session(cn.session)
 	limited := func(why string) error {
 		e.ctr.limit.Add(1)
 		return denied(v1.Code_CODE_LIMIT, why)
@@ -435,6 +439,14 @@ func (e *egressClass) dropSession(id string) {
 		}
 		delete(e.sess, id)
 	}
+}
+
+// cutSession ends a session's egress and keeps it ended on the connection
+// that holds it: a lookup or a connect is refused until a refresh succeeds.
+// Relay.mu held.
+func (e *egressClass) cutSession(id string) {
+	e.dropSession(id)
+	e.cut[id] = true
 }
 
 // dropAll ends every egress stream of the class and forgets every pinned

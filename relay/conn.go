@@ -562,7 +562,7 @@ func (cn *conn) resolve(id uint32, m *v1.Resolve) {
 	}
 	var es *egressSess
 	var flow firewall.Flow
-	if s != nil && len(addrs) == 0 && cn.c.eg != nil && !cn.c.isClassName(m.Name) {
+	if s != nil && len(addrs) == 0 && cn.c.eg != nil && !cn.c.eg.cut[cn.session] && !cn.c.isClassName(m.Name) {
 		es = cn.c.eg.session(cn.session)
 		var src netip.Addr
 		if p := cn.ownPort(m.PortId); p != nil {

@@ -190,8 +190,9 @@ wctr-relay class create lab --require-identity --allow group:students \
   `ECONNRESET`.
 - **Ends with the session.** A kick, a join-code rotation, deleting the
   class, the guest's disconnect, or a refresh that finds the identity no
-  longer allowed closes the live egress streams and forgets the pins. A
-  lookup in flight during a rotation pins nothing.
+  longer allowed (or that fails) closes the live egress streams and forgets
+  the pins, and that connection's lookups and connects stay refused until a
+  refresh succeeds. A lookup in flight during a rotation pins nothing.
 - **Logged, and said so.** Destinations are written to the flow log and kept
   for the audit retention (30 days by default). Every student's Welcome
   carries the operator's name, the allowlist, the limits and the counters, so
